@@ -71,7 +71,7 @@ As an additional component, we would like to include a repl (read-eval-print loo
 
 ## Potential References
 
-- [[https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/full-text/book/book.html]]
-- [[https://www.scheme.com/tspl2d/grammar.html]]
-- [[https://medium.com/@seanchen/building-a-scheme-to-webassembly-compiler-part-1-d423c2995386]]
-- [[https://norvig.com/lispy.html]]
+- https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/full-text/book/book.html
+- https://www.scheme.com/tspl2d/grammar.html
+- https://medium.com/@seanchen/building-a-scheme-to-webassembly-compiler-part-1-d423c2995386
+- https://norvig.com/lispy.html
