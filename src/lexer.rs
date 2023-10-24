@@ -1,6 +1,13 @@
 use thiserror::Error;
 use crate::tokens::Token;
 
+/*
+ * NOTES:
+ * - Has some issues with types that can have whitespace
+ *     - potential fix: instead of splitting on whitespace, we may need to use a stateful lexer that keeps track of its position
+ * - TODO: MORE TESTS
+ */
+
 fn lex(word: &str) -> Option<Token> {
     if let Some(token) = concrete_tokens(word) {
         Some(token)
