@@ -7,3 +7,7 @@
 
 #/target
 /Cargo.lock
+
+
+# IDEA files
+.idea
