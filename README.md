@@ -57,7 +57,7 @@ As an additional component, we would like to include a repl (read-eval-print loo
 - Evaluator:
     - lambdas, e.g.
       ```scheme
-      ((lamda (x) (* x x)) 5)
+      ((lambda (x) (* x x)) 5)
       ```
     - other language features
 - repl:
