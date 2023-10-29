@@ -8,6 +8,15 @@ pub enum Token {
     String(String),
     LParen,
     RParen,
-    Quote,
-    // TODO: comments?
+    Quote, // '(a a s d d f), 'a
+           // TODO: comments?
+}
+
+impl Token {
+    pub fn is_atom(&self) -> bool {
+        matches!(
+            self,
+            Token::Number(_) | Token::Bool(_) | Token::Char(_) | Token::String(_) | Token::Ident(_)t 
+        )
+    }
 }
