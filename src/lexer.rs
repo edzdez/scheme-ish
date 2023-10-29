@@ -180,8 +180,7 @@ impl Lexer {
     }
 
     fn legal_ident(s: &str) -> bool {
-        dbg!(s);
-        "1234567890".contains(s.chars().next().unwrap()) // this is hopefully always valid :)
+        !s.is_empty() && !"1234567890".contains(s.chars().next().unwrap()) // this is hopefully always valid :)
     }
 }
 
@@ -224,5 +223,11 @@ mod tests {
         ];
 
         assert_eq!(expected, l.tokens);
+    }
+
+    #[test]
+    fn throws_on_wrong() {
+        let mut l = Lexer::new();
+        assert!(l.tokenize("\"").is_err())
     }
 }
