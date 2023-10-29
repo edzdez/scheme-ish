@@ -1,4 +1,4 @@
-mod tokens;
+mod evaluator;
 mod lexer;
 mod parser;
-mod evaluator;
+mod tokens;
