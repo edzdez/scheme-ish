@@ -1,7 +1,4 @@
-mod evaluator;
-mod lexer;
-mod parser;
-mod tokens;
+use scheme_ish::tokens::Token;
 
 fn main() {
     println!("hello, world!");
