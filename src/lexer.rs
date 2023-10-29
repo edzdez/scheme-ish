@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 
 use crate::tokens::Token;
+use std::collections::VecDeque;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Default)]
 pub struct Lexer {
     pub tokens: Vec<Token>,
-    line: Vec<char>,
+    line: VecDeque<char>,
     curr_line: usize,
     curr_col: usize,
 }
@@ -20,11 +21,12 @@ impl Lexer {
         self.line = program.trim().chars().collect();
         self.curr_col = 0;
 
-        while self.curr_col != self.line.len() {
+        while !self.line.is_empty() {
             match self.lex() {
                 Some((t, n)) => {
                     self.tokens.push(t);
                     self.curr_col += n;
+                    self.line.drain(0..n);
                 }
                 None => return Err(LexError::InvalidToken(self.curr_line, self.curr_col)),
             }
@@ -59,14 +61,14 @@ impl Lexer {
     }
 
     fn skip_whitespace(&mut self) {
-        while let Some(true) = self.line.get(self.curr_col).map(|c| c.is_whitespace()) {
-            self.curr_col += 1;
+        while let Some(true) = self.line.front().map(|c| c.is_whitespace()) {
+            self.line.drain(0..1);
         }
     }
 
     // @requires self.curr_col != self.line.len()
     fn try_paren(&self) -> Option<(Token, usize)> {
-        let c = self.line.get(self.curr_col);
+        let c = self.line.front();
         match c {
             Some('(') => Some((Token::LParen, 1)),
             Some(')') => Some((Token::RParen, 1)),
@@ -76,7 +78,7 @@ impl Lexer {
 
     // @requires self.curr_col != self.line.len()
     fn try_quote(&self) -> Option<(Token, usize)> {
-        let c = self.line.get(self.curr_col);
+        let c = self.line.front();
         // NOTE THIS DIES FOR ESCAPES CHARS
         match c {
             Some('\'') => Some((Token::Quote, 1)),
@@ -90,13 +92,13 @@ impl Lexer {
         // take until another "
         // skip \\"
 
-        if Some(&'"') != self.line.get(self.curr_col) {
+        if Some(&'"') != self.line.front() {
             return None;
         }
 
         let mut s = String::new();
 
-        for i in (self.curr_col + 1)..self.line.len() {
+        for i in 1..self.line.len() {
             if Some(&'"') == self.line.get(i) {
                 let inc = s.len() + 2;
                 return Some((Token::String(s), inc));
@@ -110,8 +112,8 @@ impl Lexer {
 
     // @requires self.curr_col != self.line.len()
     fn try_bool(&self) -> Option<(Token, usize)> {
-        if Some(&'#') == self.line.get(self.curr_col) {
-            match self.line.get(self.curr_col + 1) {
+        if Some(&'#') == self.line.front() {
+            match self.line.get(1) {
                 Some('t') => Some((Token::Bool(true), 2)),
                 Some('f') => Some((Token::Bool(false), 2)),
                 _ => None,
@@ -127,7 +129,6 @@ impl Lexer {
             .line
             .clone()
             .into_iter()
-            .skip(self.curr_col)
             .take_while(|c| !c.is_whitespace() && !Self::stop_on_me(*c)) // we only work with unsigned now :)
             .collect::<String>();
 
@@ -143,17 +144,15 @@ impl Lexer {
     // @requires self.curr_col != self.line.len()
     fn try_char(&self) -> Option<(Token, usize)> {
         // 'c', '\\', ' ', ...
-        if self.line.len() < self.curr_col + 3 {
+        if self.line.len() < 3 {
             return None;
         }
 
-        if !(self.line.get(self.curr_col) == Some(&'\''))
-            || !(self.line.get(self.curr_col + 2) == Some(&'\''))
-        {
+        if !(self.line.front() == Some(&'\'')) || !(self.line.get(2) == Some(&'\'')) {
             return None;
         }
 
-        Some((Token::Char(*self.line.get(self.curr_col + 1).unwrap()), 3))
+        Some((Token::Char(*self.line.get(1).unwrap()), 3))
     }
 
     // @requires self.curr_col != self.line.len()
@@ -162,7 +161,6 @@ impl Lexer {
             .line
             .clone()
             .into_iter()
-            .skip(self.curr_col)
             .take_while(|c| !c.is_whitespace() && !Self::stop_on_me(*c)) // we only work with unsigned now :)
             .collect::<String>();
 
