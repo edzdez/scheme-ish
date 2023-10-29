@@ -129,7 +129,7 @@ impl Lexer {
             .line
             .clone()
             .into_iter()
-            .take_while(|c| !c.is_whitespace() && !Self::stop_on_me(*c)) // we only work with unsigned now :)
+            .take_while(|c| !c.is_whitespace() && !Self::stop_on_me(*c))
             .collect::<String>();
 
         let len = str.len();
@@ -161,7 +161,7 @@ impl Lexer {
             .line
             .clone()
             .into_iter()
-            .take_while(|c| !c.is_whitespace() && !Self::stop_on_me(*c)) // we only work with unsigned now :)
+            .take_while(|c| !c.is_whitespace() && !Self::stop_on_me(*c))
             .collect::<String>();
 
         let len = s.len();
@@ -197,7 +197,7 @@ mod tests {
         let mut l = Lexer::new();
         l.tokenize("'(#t #f)")
             .unwrap()
-            .tokenize("(10       2)")
+            .tokenize("(10       -2)")
             .unwrap()
             .tokenize("(\'2\'   ")
             .unwrap()
@@ -212,7 +212,7 @@ mod tests {
             Token::RParen,
             Token::LParen,
             Token::Number(10),
-            Token::Number(2),
+            Token::Number(-2),
             Token::RParen,
             Token::LParen,
             Token::Char('2'),
