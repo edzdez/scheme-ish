@@ -197,11 +197,11 @@ mod tests {
         let mut l = Lexer::new();
         l.tokenize("'(#t #f)")
             .unwrap()
-            .tokenize("(10 2)")
+            .tokenize("(10       2)")
             .unwrap()
-            .tokenize("(\'2\'")
+            .tokenize("(\'2\'   ")
             .unwrap()
-            .tokenize("(\"a 2 j()\"")
+            .tokenize("    (  \"a 2 j()\"")
             .unwrap();
 
         let expected = vec![
