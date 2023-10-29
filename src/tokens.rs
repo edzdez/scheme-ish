@@ -4,8 +4,8 @@ pub enum Token {
     Bool(bool),
     Number(i64),
     // TODO: floats?
-    // Char(char),
-    // String(String),
+    Char(char),
+    String(String),
     LParen,
     RParen,
     Quote,

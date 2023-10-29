@@ -1,12 +1,7 @@
+#![allow(dead_code)]
+
 use crate::tokens::Token;
 use thiserror::Error;
-
-/*
- * NOTES:
- * - Has some issues with types that can have whitespace
- *     - potential fix: instead of splitting on whitespace, we may need to use a stateful lexer that keeps track of its position
- * - TODO: MORE TESTS
- */
 
 #[derive(Debug, Clone, Default)]
 pub struct Lexer {
@@ -50,7 +45,11 @@ impl Lexer {
             Some(res)
         } else if let Some(res) = self.try_num() {
             Some(res)
+        } else if let Some(res) = self.try_char() {
+            Some(res)
         } else if let Some(res) = self.try_quote() {
+            Some(res)
+        } else if let Some(res) = self.try_string() {
             Some(res)
         } else if let Some(res) = self.try_ident() {
             Some(res)
@@ -78,10 +77,35 @@ impl Lexer {
     // @requires self.curr_col != self.line.len()
     fn try_quote(&self) -> Option<(Token, usize)> {
         let c = self.line.get(self.curr_col);
+        // NOTE THIS DIES FOR ESCAPES CHARS
         match c {
             Some('\'') => Some((Token::Quote, 1)),
             _ => None,
         }
+    }
+
+    // @requires self.curr_col != self.line.len()
+    fn try_string(&self) -> Option<(Token, usize)> {
+        // start with "
+        // take until another "
+        // skip \\"
+
+        if Some(&'"') != self.line.get(self.curr_col) {
+            return None;
+        }
+
+        let mut s = String::new();
+
+        for i in (self.curr_col + 1)..self.line.len() {
+            if Some(&'"') == self.line.get(i) {
+                let inc = s.len() + 2;
+                return Some((Token::String(s), inc));
+            }
+            s.push(*self.line.get(i).unwrap());
+        }
+
+        // error
+        None
     }
 
     // @requires self.curr_col != self.line.len()
@@ -118,7 +142,18 @@ impl Lexer {
 
     // @requires self.curr_col != self.line.len()
     fn try_char(&self) -> Option<(Token, usize)> {
-        todo!()
+        // 'c', '\\', ' ', ...
+        if self.line.len() < self.curr_col + 3 {
+            return None;
+        }
+
+        if !(self.line.get(self.curr_col) == Some(&'\''))
+            || !(self.line.get(self.curr_col + 2) == Some(&'\''))
+        {
+            return None;
+        }
+
+        Some((Token::Char(*self.line.get(self.curr_col + 1).unwrap()), 3))
     }
 
     // @requires self.curr_col != self.line.len()
@@ -161,9 +196,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn correctly_parses_valid_programs() {
+    fn correctly_parses_valid_streams() {
         let mut l = Lexer::new();
-        l.tokenize("'(#t #f)").unwrap().tokenize("(10 2)").unwrap();
+        l.tokenize("'(#t #f)")
+            .unwrap()
+            .tokenize("(10 2)")
+            .unwrap()
+            .tokenize("(\'2\'")
+            .unwrap()
+            .tokenize("(\"a 2 j()\"")
+            .unwrap();
 
         let expected = vec![
             Token::Quote,
@@ -175,6 +217,10 @@ mod tests {
             Token::Number(10),
             Token::Number(2),
             Token::RParen,
+            Token::LParen,
+            Token::Char('2'),
+            Token::LParen,
+            Token::String("a 2 j()".to_string()),
         ];
 
         assert_eq!(expected, l.tokens);
