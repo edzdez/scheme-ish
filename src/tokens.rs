@@ -16,7 +16,7 @@ impl Token {
     pub fn is_atom(&self) -> bool {
         matches!(
             self,
-            Token::Number(_) | Token::Bool(_) | Token::Char(_) | Token::String(_) | Token::Ident(_)t 
+            Token::Number(_) | Token::Bool(_) | Token::Char(_) | Token::String(_) | Token::Ident(_)
         )
     }
 }
