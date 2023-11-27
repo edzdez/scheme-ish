@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::expr::{Atom, Expr};
+use crate::expr::Expr;
 use crate::tokens::Token;
 use thiserror::Error;
 
@@ -30,10 +30,9 @@ impl Parser {
     {
         match token_stream.next() {
             Some(Token::LParen) => {
-                let mut cons_list = Expr::Pair(None, None);
                 let mut stack = Vec::new();
                 while let Ok(Some(body)) = self.parse_block(token_stream) {
-                    if body == Expr::Atom(Atom::Primitive(Token::RParen)) {
+                    if body == Expr::Atom(Token::RParen) {
                         let mut cons_list = Expr::Pair(None, None);
                         while let Some(e) = stack.pop() {
                             if Expr::Pair(None, None) == cons_list {
@@ -52,8 +51,8 @@ impl Parser {
 
                 Err(ParseError::EOF)
             }
-            Some(Token::RParen) => Ok(Some(Expr::Atom(Atom::Primitive(Token::RParen)))),
-            Some(token) if token.is_atom() => Ok(Some(Expr::Atom(Atom::Primitive(token)))),
+            Some(Token::RParen) => Ok(Some(Expr::Atom(Token::RParen))),
+            Some(token) if token.is_atom() => Ok(Some(Expr::Atom(token))),
             Some(token) => unreachable!("unhandled token {:?}!", token),
             None => Ok(None),
         }
@@ -82,16 +81,16 @@ mod tests {
         assert_eq!(
             parser.ast,
             vec![
-                Expr::Atom(Atom::Primitive(Token::Number(3))),
-                Expr::Atom(Atom::Primitive(Token::Char('a'))),
-                Expr::Atom(Atom::Primitive(Token::Bool(true))),
+                Expr::Atom(Token::Number(3)),
+                Expr::Atom(Token::Char('a')),
+                Expr::Atom(Token::Bool(true)),
             ]
         );
     }
 
     #[test]
     fn test_lists() {
-        // '( '(1 #f) a #t '( 'c' "a b "))
+        // ((1 #f) a #t ('c' "a b "))
         let mut tokens = vec![
             Token::LParen,
             Token::LParen,
@@ -110,7 +109,33 @@ mod tests {
         let mut parser = Parser::new();
         parser.parse(&mut tokens).unwrap();
 
-        // assert_eq!(parser.ast, vec![])
-        dbg!(&parser.ast);
+        assert_eq!(
+            parser.ast,
+            vec![Expr::Pair(
+                Some(Box::new(Expr::Pair(
+                    Some(Box::new(Expr::Atom(Token::Number(1)))),
+                    Some(Box::new(Expr::Pair(
+                        Some(Box::new(Expr::Atom(Token::Bool(false)))),
+                        None
+                    )))
+                ))),
+                Some(Box::new(Expr::Pair(
+                    Some(Box::new(Expr::Atom(Token::Ident("a".to_string())))),
+                    Some(Box::new(Expr::Pair(
+                        Some(Box::new(Expr::Atom(Token::Bool(true)))),
+                        Some(Box::new(Expr::Pair(
+                            Some(Box::new(Expr::Pair(
+                                Some(Box::new(Expr::Atom(Token::Char('c')))),
+                                Some(Box::new(Expr::Pair(
+                                    Some(Box::new(Expr::Atom(Token::String("a b ".to_string())))),
+                                    None
+                                )))
+                            )),),
+                            None
+                        )))
+                    )))
+                )))
+            )]
+        );
     }
 }
