@@ -39,8 +39,6 @@ impl Lexer {
 
     // @requires self.curr_col != self.line.len()
     fn lex(&mut self) -> Option<(Token, usize)> {
-        // parse order: char > quote >> ident (> implies higher precedence)
-        // kill me...
         if let Some(res) = self.try_paren() {
             Some(res)
         } else if let Some(res) = self.try_bool() {
@@ -48,8 +46,6 @@ impl Lexer {
         } else if let Some(res) = self.try_num() {
             Some(res)
         } else if let Some(res) = self.try_char() {
-            Some(res)
-        } else if let Some(res) = self.try_quote() {
             Some(res)
         } else if let Some(res) = self.try_string() {
             Some(res)
@@ -72,16 +68,6 @@ impl Lexer {
         match c {
             Some('(') => Some((Token::LParen, 1)),
             Some(')') => Some((Token::RParen, 1)),
-            _ => None,
-        }
-    }
-
-    // @requires self.curr_col != self.line.len()
-    fn try_quote(&self) -> Option<(Token, usize)> {
-        let c = self.line.front();
-        // NOTE THIS DIES FOR ESCAPES CHARS
-        match c {
-            Some('\'') => Some((Token::Quote, 1)),
             _ => None,
         }
     }
@@ -195,7 +181,7 @@ mod tests {
     #[test]
     fn correctly_parses_valid_streams() {
         let mut l = Lexer::new();
-        l.tokenize("'(#t #f)")
+        l.tokenize("(#t #f)")
             .unwrap()
             .tokenize("(10       -2)")
             .unwrap()
@@ -205,7 +191,6 @@ mod tests {
             .unwrap();
 
         let expected = vec![
-            Token::Quote,
             Token::LParen,
             Token::Bool(true),
             Token::Bool(false),

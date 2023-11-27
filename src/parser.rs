@@ -29,11 +29,6 @@ impl Parser {
         T: Iterator<Item = Token>,
     {
         match token_stream.next() {
-            Some(Token::Quote) => match self.parse_block(token_stream) {
-                Ok(Some(expr)) => Ok(Some(Expr::Atom(Atom::Quoted(Box::new(expr))))),
-                Ok(None) | Err(ParseError::EOF) => Err(ParseError::TrailingQuote),
-                e => e,
-            },
             Some(Token::LParen) => {
                 let mut cons_list = Expr::Pair(None, None);
                 let mut stack = Vec::new();
@@ -70,9 +65,6 @@ pub enum ParseError {
     #[error("Unmatched braces")]
     UnmatchedBraces,
 
-    #[error("quote followed by no token???")]
-    TrailingQuote,
-
     #[error("reached EOF!!!")]
     EOF,
 }
@@ -98,34 +90,16 @@ mod tests {
     }
 
     #[test]
-    fn test_quoted_atoms() {
-        // '#
-        let mut tokens = vec![Token::Quote, Token::Char('#')].into_iter();
-        let mut parser = Parser::new();
-        parser.parse(&mut tokens).unwrap();
-
-        assert_eq!(
-            parser.ast,
-            vec![Expr::Atom(Atom::Quoted(Box::new(Expr::Atom(
-                Atom::Primitive(Token::Char('#'))
-            ))))]
-        );
-    }
-
-    #[test]
     fn test_lists() {
         // '( '(1 #f) a #t '( 'c' "a b "))
         let mut tokens = vec![
-            Token::Quote,
             Token::LParen,
-            Token::Quote,
             Token::LParen,
             Token::Number(1),
             Token::Bool(false),
             Token::RParen,
             Token::Ident("a".to_string()),
             Token::Bool(true),
-            Token::Quote,
             Token::LParen,
             Token::Char('c'),
             Token::String("a b ".to_string()),

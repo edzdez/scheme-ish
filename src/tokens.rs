@@ -8,8 +8,8 @@ pub enum Token {
     String(String),
     LParen,
     RParen,
-    Quote, // '(a a s d d f), 'a
-           // TODO: comments?
+    // Quote, // '(a a s d d f), 'a
+    // TODO: comments?
 }
 
 impl Token {
