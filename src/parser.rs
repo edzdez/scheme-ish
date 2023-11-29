@@ -5,8 +5,8 @@ use crate::tokens::Token;
 use thiserror::Error;
 
 #[derive(Debug, Default)]
-struct Parser {
-    ast: Vec<Expr>,
+pub struct Parser {
+    pub ast: Vec<Expr>,
 }
 
 impl Parser {
@@ -49,7 +49,7 @@ impl Parser {
                     stack.push(body);
                 }
 
-                Err(ParseError::EOF)
+                Err(ParseError::UnmatchedBraces)
             }
             Some(Token::RParen) => Ok(Some(Expr::Atom(Token::RParen))),
             Some(token) if token.is_atom() => Ok(Some(Expr::Atom(token))),
