@@ -1,5 +1,6 @@
 use scheme_ish::{lexer::LexError, lexer::Lexer, parser::ParseError, parser::Parser};
 use std::io;
+use std::io::Write;
 use thiserror::Error;
 
 fn repl() -> Result<(), ReplError> {
