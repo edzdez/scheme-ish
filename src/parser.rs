@@ -18,44 +18,58 @@ impl Parser {
     where
         T: Iterator<Item = Token>,
     {
-        while let Some(expr) = self.parse_block(token_stream)? {
+        while let Some(expr) = self.parse_block(token_stream, false)? {
             self.ast.push(expr);
         }
         Ok(self)
     }
 
-    fn parse_block<T>(&self, token_stream: &mut T) -> Result<Option<Expr>, ParseError>
+    fn parse_block<T>(
+        &self,
+        token_stream: &mut T,
+        left_paren: bool,
+    ) -> Result<Option<Expr>, ParseError>
     where
         T: Iterator<Item = Token>,
     {
         match token_stream.next() {
-            Some(Token::LParen) => {
-                let mut stack = Vec::new();
-                while let Ok(Some(body)) = self.parse_block(token_stream) {
-                    if body == Expr::Atom(Token::RParen) {
-                        let mut cons_list = Expr::Pair(None, None);
-                        while let Some(e) = stack.pop() {
-                            if Expr::Pair(None, None) == cons_list {
-                                //  base case
-                                cons_list = Expr::Pair(Some(Box::new(e)), None);
-                            } else {
-                                cons_list =
-                                    Expr::Pair(Some(Box::new(e)), Some(Box::new(cons_list)));
-                            }
-                        }
-
-                        return Ok(Some(cons_list));
-                    }
-                    stack.push(body);
+            Some(Token::LParen) => self.parse_paren_block(token_stream),
+            Some(Token::RParen) => {
+                if !left_paren {
+                    Err(ParseError::UnmatchedBraces)
+                } else {
+                    Ok(Some(Expr::Atom(Token::RParen)))
                 }
-
-                Err(ParseError::UnmatchedBraces)
             }
-            Some(Token::RParen) => Ok(Some(Expr::Atom(Token::RParen))),
             Some(token) if token.is_atom() => Ok(Some(Expr::Atom(token))),
             Some(token) => unreachable!("unhandled token {:?}!", token),
             None => Ok(None),
         }
+    }
+
+    fn parse_paren_block<T>(&self, token_stream: &mut T) -> Result<Option<Expr>, ParseError>
+    where
+        T: Iterator<Item = Token>,
+    {
+        let mut stack = Vec::new();
+        while let Ok(Some(body)) = self.parse_block(token_stream, true) {
+            if body == Expr::Atom(Token::RParen) {
+                let mut cons_list = Expr::Pair(None, None);
+                while let Some(e) = stack.pop() {
+                    if Expr::Pair(None, None) == cons_list {
+                        //  base case
+                        cons_list = Expr::Pair(Some(Box::new(e)), None);
+                    } else {
+                        cons_list = Expr::Pair(Some(Box::new(e)), Some(Box::new(cons_list)));
+                    }
+                }
+
+                return Ok(Some(cons_list));
+            }
+            stack.push(body);
+        }
+
+        Err(ParseError::UnmatchedBraces)
     }
 }
 
