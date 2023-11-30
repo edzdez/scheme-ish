@@ -9,7 +9,6 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
-    pub vtable_f: HashMap<String, Func<'a>>,
     pub parent: Option<&'a Environment<'a>>,
 }
 
@@ -18,7 +17,6 @@ impl Default for Environment<'_> {
         Self {
             // todo: implement this
             vtable: Default::default(),
-            vtable_f: Default::default(),
             parent: None,
         }
     }
@@ -31,26 +29,14 @@ impl<'a> Environment<'a> {
             .or_else(|| self.parent.map(|env| env.find(s))?)
     }
 
-    pub fn find_f(&self, s: &String) -> Option<&Func> {
-        self.vtable_f
-            .get(s)
-            .or_else(|| self.parent.map(|env| env.find_f(s))?)
-    }
-
     pub fn add(&mut self, name: String, value: Value) {
         self.vtable.insert(name, value);
-    }
-
-    pub fn add_f(&mut self, name: String, body: Expr) {
-        // self.vtable.insert(name, value);
-        todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-struct Func<'a> {
+pub struct Func {
     params: Vec<Token>, // these should only be identifiers
-    env: &'a Environment<'a>,
     body: Expr,
 }
 
@@ -61,6 +47,7 @@ pub enum Value {
     Number(i64),
     Bool(bool),
     List(LinkedList<Value>),
+    Function(Func),
     Nil,
     Unit,
 }
@@ -85,16 +72,18 @@ impl Evaluator {
             Expr::Pair(Some(func), args) => match *func {
                 Expr::Atom(Token::Ident(f)) => match f.as_str() {
                     "define" => {
-                        Self::define(args, env);
+                        Self::define(args, env)?;
                         Ok(Value::Unit)
                     }
                     "+" => {
-                        let args = Self::flatten_args(args, env)?;
+                        let args = Self::flatten_args(args)?;
+                        let args = Self::eval_args(args, env)?;
                         Self::plus(args)
                     }
                     // add other special forms here
                     _ => {
-                        let args = Self::flatten_args(args, env)?;
+                        let args = Self::flatten_args(args)?;
+                        let args = Self::eval_args(args, env)?;
                         Self::eval_func(f, args, env)
                     }
                 },
@@ -110,13 +99,15 @@ impl Evaluator {
         args: Vec<Value>,
         env: &mut Environment,
     ) -> Result<Value, EvalError> {
-        env.find_f(&func)
-            .map(|func| {
-                let mut env = Self::process_args(&func.params, args)?;
-                env.parent = Some(&func.env);
-                Self::eval(func.body.clone(), &mut env)
-            })
-            .unwrap_or(Err(EvalError::UnknownIdent))
+        match env.find(&func) {
+            None => Err(EvalError::UnknownIdent),
+            Some(Value::Function(func)) => {
+                let mut new_env = Self::process_args(&func.params, args)?;
+                new_env.parent = Some(&env);
+                Self::eval(func.body.clone(), &mut new_env)
+            }
+            _ => Err(EvalError::UnknownIdent),
+        }
     }
 
     fn eval_atom(t: Token, env: &mut Environment) -> Result<Value, EvalError> {
@@ -133,38 +124,63 @@ impl Evaluator {
         }
     }
 
-    fn flatten_args(
-        args: Option<Box<Expr>>,
-        env: &mut Environment,
-    ) -> Result<Vec<Value>, EvalError> {
-        let mut out = Vec::<Value>::new();
+    fn flatten_args(args: Option<Box<Expr>>) -> Result<Vec<Expr>, EvalError> {
+        let mut out = Vec::<Expr>::new();
         let mut args = args;
 
         while let Some(Expr::Pair(Some(car), cdr)) = args.take().as_deref() {
-            let expr = Self::eval(*car.clone(), env)?;
-            out.push(expr);
+            out.push(*car.clone());
             args = cdr.clone();
         }
 
         Ok(out)
     }
 
-    fn process_args(params: &Vec<Token>, args: Vec<Value>) -> Result<Environment, EvalError> {
+    fn eval_args(args: Vec<Expr>, env: &mut Environment) -> Result<Vec<Value>, EvalError> {
+        let mut out = Vec::<Value>::new();
+        let mut iter = args.into_iter();
+
+        while let Some(expr) = iter.next() {
+            let arg = Self::eval(expr, env)?;
+            out.push(arg);
+        }
+
+        Ok(out)
+    }
+
+    fn process_args<'a>(
+        params: &Vec<Token>,
+        args: Vec<Value>,
+    ) -> Result<Environment<'a>, EvalError> {
+        if params.len() != args.len() {
+            return Err(EvalError::WrongNoArgs);
+        }
+
         let mut out = Environment::default();
         let mut iter = zip(params, args);
         while let Some((Token::Ident(param), arg)) = iter.next() {
             out.add(param.to_string(), arg);
         }
 
-        if iter.next().is_none() {
-            Err(EvalError::TooManyArgs)
-        } else {
-            Ok(out)
-        }
+        Ok(out)
     }
 
-    fn define(args: Option<Box<Expr>>, env: &mut Environment) {
-        todo!()
+    fn define(args: Option<Box<Expr>>, env: &mut Environment) -> Result<(), EvalError> {
+        let mut args = Self::flatten_args(args)?;
+
+        if args.len() != 2 {
+            return Err(EvalError::WrongNoArgs);
+        }
+
+        let value = Self::eval(args.pop().unwrap(), env)?;
+        match args.pop().unwrap() {
+            Expr::Atom(Token::Ident(name)) => {
+                env.add(name, value);
+            }
+            _ => return Err(EvalError::InvalidArguments),
+        }
+
+        Ok(())
     }
 
     fn plus(args: Vec<Value>) -> Result<Value, EvalError> {
@@ -185,9 +201,12 @@ pub enum EvalError {
     #[error("Unknown Identifier")]
     UnknownIdent,
 
-    #[error("Too many arguments")]
-    TooManyArgs,
+    #[error("Wrong number of arguments")]
+    WrongNoArgs,
 
     #[error("Arithmetic Error")]
     ArithmeticError,
+
+    #[error("Argument Error")]
+    InvalidArguments,
 }

@@ -12,10 +12,9 @@ fn print_help_message() {
     println!(":q\tquit");
 }
 
-fn evaluate(buffer: &str) -> Result<(), ReplError> {
+fn evaluate(buffer: &str, evaluator: &mut Evaluator) -> Result<(), ReplError> {
     let mut tokenizer = Lexer::new();
     let mut parser = Parser::new();
-    let mut evaluator = Evaluator::new();
 
     tokenizer.tokenize(&buffer)?;
     parser.parse(&mut tokenizer.tokens.into_iter())?;
@@ -28,7 +27,7 @@ fn evaluate(buffer: &str) -> Result<(), ReplError> {
     Ok(())
 }
 
-fn repl() -> Result<bool, ReplError> {
+fn repl(evaluator: &mut Evaluator) -> Result<bool, ReplError> {
     print!("> ");
     io::stdout().flush()?;
 
@@ -42,16 +41,18 @@ fn repl() -> Result<bool, ReplError> {
         print_help_message();
         Ok(true)
     } else {
-        evaluate(buffer)?;
+        evaluate(buffer, evaluator)?;
         Ok(true)
     }
 }
 
 fn main() {
+    let mut evaluator = Evaluator::new();
+
     println!("Welcome to scheme-ish!");
     println!("Type :h for help");
     loop {
-        match repl() {
+        match repl(&mut evaluator) {
             Ok(true) => {}
             Ok(false) => {
                 println!("Goodbye!");
