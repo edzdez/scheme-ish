@@ -75,6 +75,7 @@ impl Evaluator {
                         Self::define(args, env)?;
                         Ok(Value::Unit)
                     }
+                    "lambda" => Self::lambda(args, env),
                     "+" => {
                         let args = Self::flatten_args(args)?;
                         let args = Self::eval_args(args, env)?;
@@ -82,32 +83,36 @@ impl Evaluator {
                     }
                     // add other special forms here
                     _ => {
-                        let args = Self::flatten_args(args)?;
-                        let args = Self::eval_args(args, env)?;
-                        Self::eval_func(f, args, env)
+                        if let Some(Value::Function(func)) = env.find(&f) {
+                            let func = func.clone();
+                            let args = Self::flatten_args(args)?;
+                            let args = Self::eval_args(args, env)?;
+                            Self::eval_func(func, args, env)
+                        } else {
+                            Err(EvalError::InvalidArguments)
+                        }
                     }
                 },
-                _ => unreachable!("function name not an ident"),
+                _ => {
+                    let func = Self::eval(*func, env)?;
+                    if let Value::Function(func) = func {
+                        let args = Self::flatten_args(args)?;
+                        let args = Self::eval_args(args, env)?;
+                        Self::eval_func(func, args, env)
+                    } else {
+                        Err(EvalError::InvalidArguments)
+                    }
+                }
             },
             Expr::Pair(None, Some(_)) => unreachable!("pair with none and some"),
             Expr::Pair(None, _) => Ok(Value::Nil),
         }
     }
 
-    fn eval_func(
-        func: String,
-        args: Vec<Value>,
-        env: &mut Environment,
-    ) -> Result<Value, EvalError> {
-        match env.find(&func) {
-            None => Err(EvalError::UnknownIdent),
-            Some(Value::Function(func)) => {
-                let mut new_env = Self::process_args(&func.params, args)?;
-                new_env.parent = Some(&env);
-                Self::eval(func.body.clone(), &mut new_env)
-            }
-            _ => Err(EvalError::UnknownIdent),
-        }
+    fn eval_func(func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
+        let mut new_env = Self::process_args(&func.params, args)?;
+        new_env.parent = Some(&env);
+        Self::eval(func.body, &mut new_env)
     }
 
     fn eval_atom(t: Token, env: &mut Environment) -> Result<Value, EvalError> {
@@ -181,6 +186,30 @@ impl Evaluator {
         }
 
         Ok(())
+    }
+
+    fn lambda(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
+        let mut args = Self::flatten_args(args)?;
+
+        if args.len() != 2 {
+            return Err(EvalError::WrongNoArgs);
+        }
+
+        let body = args.pop().unwrap();
+
+        let params = args.pop().unwrap();
+        let mut params_iter = Self::flatten_args(Some(Box::new(params)))?.into_iter();
+        let mut params = Vec::new();
+
+        while let Some(Expr::Atom(Token::Ident(id))) = params_iter.next() {
+            params.push(Token::Ident(id));
+        }
+
+        if params_iter.next().is_some() {
+            return Err(EvalError::InvalidArguments);
+        }
+
+        Ok(Value::Function(Func { params, body }))
     }
 
     fn plus(args: Vec<Value>) -> Result<Value, EvalError> {
