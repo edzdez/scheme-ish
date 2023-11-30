@@ -73,6 +73,8 @@ impl Evaluator {
                 Expr::Atom(Token::Ident(f)) => match f.as_str() {
                     "define" => Self::define(args, env),
                     "lambda" => Self::lambda(args),
+                    "if" => Self::if_(args, env),
+                    "cond" => Self::cond_(args, env),
                     "+" => {
                         let args = Self::flatten_args(args)?;
                         let args = Self::eval_args(args, env)?;
@@ -207,6 +209,54 @@ impl Evaluator {
         }
 
         Ok(Value::Function(Func { params, body }))
+    }
+
+    fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
+        let mut args = Self::flatten_args(args)?;
+
+        if args.len() != 3 {
+            return Err(EvalError::WrongNoArgs);
+        }
+
+        let alternative = args.pop().unwrap();
+        let consequent = args.pop().unwrap();
+        let predicate = args.pop().unwrap();
+
+        match Self::eval(predicate, env)? {
+            Value::Bool(true) => Self::eval(consequent, env),
+            Value::Bool(false) => Self::eval(alternative, env),
+            _ => Err(EvalError::InvalidArguments),
+        }
+    }
+
+    fn cond_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
+        let mut args_iter = Self::flatten_args(args)?.into_iter();
+        while let Some(Expr::Pair(Some(pred), Some(cons))) = args_iter.next() {
+            if *pred == Expr::Atom(Token::Ident(String::from("else"))) {
+                if let Expr::Pair(Some(cons), None) = *cons {
+                    return Self::eval(*cons, env);
+                } else {
+                    return Err(EvalError::InvalidArguments);
+                }
+            }
+
+            let pred = Self::eval(*pred, env)?;
+            if pred == Value::Bool(true) {
+                if let Expr::Pair(Some(cons), None) = *cons {
+                    return Self::eval(*cons, env);
+                } else {
+                    return Err(EvalError::InvalidArguments);
+                }
+            } else if pred != Value::Bool(false) {
+                return Err(EvalError::InvalidArguments);
+            }
+        }
+
+        if args_iter.next().is_some() {
+            return Err(EvalError::InvalidArguments);
+        }
+
+        Ok(Value::Unit)
     }
 
     fn plus(args: Vec<Value>) -> Result<Value, EvalError> {
