@@ -6,6 +6,14 @@ use std::collections::{HashMap, LinkedList};
 use std::iter::zip;
 use thiserror::Error;
 
+macro_rules! eager {
+    ($args:expr,$env:expr,$f:expr) => {{
+        let args = Self::flatten_args($args)?;
+        let args = Self::eval_args(args, $env)?;
+        $f(args)
+    }};
+}
+
 #[derive(Debug, Clone)]
 struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
@@ -14,9 +22,11 @@ struct Environment<'a> {
 
 impl Default for Environment<'_> {
     fn default() -> Self {
+        let mut vtable = HashMap::new();
+        vtable.insert(String::from("nil"), Value::Nil);
+
         Self {
-            // todo: implement this
-            vtable: Default::default(),
+            vtable,
             parent: None,
         }
     }
@@ -71,16 +81,18 @@ impl Evaluator {
             Expr::Atom(t) => Self::eval_atom(t, env),
             Expr::Pair(Some(func), args) => match *func {
                 Expr::Atom(Token::Ident(f)) => match f.as_str() {
-                    "define" => Self::define(args, env),
-                    "lambda" => Self::lambda(args),
-                    "if" => Self::if_(args, env),
+                    // special forms
+                    "define" => Self::define_(args, env),
+                    "lambda" => Self::lambda_(args),
                     "cond" => Self::cond_(args, env),
-                    "+" => {
-                        let args = Self::flatten_args(args)?;
-                        let args = Self::eval_args(args, env)?;
-                        Self::plus(args)
-                    }
-                    // add other special forms here
+                    "if" => Self::if_(args, env),
+
+                    // builtins
+                    "cons" => eager!(args, env, Self::cons),
+                    "car" => eager!(args, env, Self::car),
+                    "cdr" => eager!(args, env, Self::cdr),
+                    "+" => eager!(args, env, Self::plus),
+                    "-" => eager!(args, env, Self::subtract),
                     _ => {
                         if let Some(Value::Function(func)) = env.find(&f) {
                             let func = func.clone();
@@ -156,9 +168,7 @@ impl Evaluator {
         params: &Vec<Token>,
         args: Vec<Value>,
     ) -> Result<Environment<'a>, EvalError> {
-        if params.len() != args.len() {
-            return Err(EvalError::WrongNoArgs);
-        }
+        Self::validate_arity(&args, params.len())?;
 
         let mut out = Environment::default();
         let mut iter = zip(params, args);
@@ -169,12 +179,17 @@ impl Evaluator {
         Ok(out)
     }
 
-    fn define(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
-        let mut args = Self::flatten_args(args)?;
-
-        if args.len() != 2 {
-            return Err(EvalError::WrongNoArgs);
+    fn validate_arity<T>(args: &Vec<T>, arity: usize) -> Result<(), EvalError> {
+        if args.len() != arity {
+            Err(EvalError::WrongNoArgs)
+        } else {
+            Ok(())
         }
+    }
+
+    fn define_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
+        let mut args = Self::flatten_args(args)?;
+        Self::validate_arity(&args, 2)?;
 
         let value = Self::eval(args.pop().unwrap(), env)?;
         match args.pop().unwrap() {
@@ -187,12 +202,9 @@ impl Evaluator {
         Ok(Value::Unit)
     }
 
-    fn lambda(args: Option<Box<Expr>>) -> Result<Value, EvalError> {
+    fn lambda_(args: Option<Box<Expr>>) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
-
-        if args.len() != 2 {
-            return Err(EvalError::WrongNoArgs);
-        }
+        Self::validate_arity(&args, 2)?;
 
         let body = args.pop().unwrap();
 
@@ -214,9 +226,7 @@ impl Evaluator {
     fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
 
-        if args.len() != 3 {
-            return Err(EvalError::WrongNoArgs);
-        }
+        Self::validate_arity(&args, 3)?;
 
         let alternative = args.pop().unwrap();
         let consequent = args.pop().unwrap();
@@ -259,7 +269,64 @@ impl Evaluator {
         Ok(Value::Unit)
     }
 
+    fn cons(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2)?;
+        Ok(Value::List(args.into_iter().collect()))
+    }
+
+    fn car(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 1)?;
+        if let Value::List(l) = &args[0] {
+            if l.is_empty() {
+                Err(EvalError::InvalidArguments)
+            } else {
+                Ok(l.front().unwrap().clone())
+            }
+        } else {
+            Err(EvalError::InvalidArguments)
+        }
+    }
+
+    fn cdr(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 1)?;
+        if let Value::List(mut l) = args[0].clone() {
+            if l.is_empty() {
+                Err(EvalError::InvalidArguments)
+            } else {
+                l.pop_front();
+                Ok(Value::List(l))
+            }
+        } else {
+            Err(EvalError::InvalidArguments)
+        }
+    }
+
+    fn subtract(args: Vec<Value>) -> Result<Value, EvalError> {
+        if args.len() < 2 {
+            return Err(EvalError::InvalidArguments);
+        }
+
+        let mut sum = 0;
+        if let Value::Number(x) = &args[0] {
+            sum += 2 * x;
+        }
+
+        for val in args {
+            if let Value::Number(x) = val {
+                sum -= x;
+            } else {
+                return Err(EvalError::ArithmeticError);
+            }
+        }
+
+        Ok(Value::Number(sum))
+    }
+
     fn plus(args: Vec<Value>) -> Result<Value, EvalError> {
+        if args.len() < 2 {
+            return Err(EvalError::InvalidArguments);
+        }
+
         let mut sum = 0;
         for val in args {
             if let Value::Number(x) = val {
