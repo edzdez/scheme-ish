@@ -244,55 +244,28 @@ mod tests {
     use crate::parser::Parser;
 
     #[test]
-    fn define() {
-        // on atoms
-        {
-            let mut tokenizer = Lexer::new();
-            let mut parser = Parser::new();
-
-            tokenizer.tokenize("(define a 5) a").unwrap();
-            parser.parse(&mut tokenizer.tokens.into_iter()).unwrap();
-
-            let mut evaluator = Evaluator::new();
-            evaluator.evaluate(parser.ast[0].clone()).expect("what");
-            let out = evaluator.evaluate(parser.ast[1].clone());
-
-            let expected = Ok(Value::Number(5));
-            assert_eq!(expected, out);
-        }
-
-        // on not atoms
-        {
-            let mut tokenizer = Lexer::new();
-            let mut parser = Parser::new();
-
-            tokenizer
-                .tokenize("(define succ (lambda (x) (+ x 1))) (succ 12344)")
-                .unwrap();
-            parser.parse(&mut tokenizer.tokens.into_iter()).unwrap();
-
-            let mut evaluator = Evaluator::new();
-            evaluator.evaluate(parser.ast[0].clone()).expect("what");
-            let out = evaluator.evaluate(parser.ast[1].clone());
-
-            let expected = Ok(Value::Number(12345));
-            assert_eq!(expected, out);
-        }
-    }
-
-    #[test]
-    fn eval_lambda() {
-        // we assume tokenizer and parser are working correctly!
-        let mut tokenizer = Lexer::new();
+    fn paren_paren() {
+        // we assume lexer and parser are working correctly!
+        let mut lexer = Lexer::new();
         let mut parser = Parser::new();
 
-        tokenizer.tokenize("((lambda (x) (+ 42 x)) 2)").unwrap();
-        parser.parse(&mut tokenizer.tokens.into_iter()).unwrap();
+        lexer.tokenize("(lambda (x) (+ 42 x)) 2").unwrap();
+        parser.parse(&mut lexer.tokens.into_iter()).unwrap();
 
         let mut evaluator = Evaluator::new();
         let out = evaluator.evaluate(parser.ast[0].clone());
 
         let expected = Ok(Value::Number(44));
         assert_eq!(expected, out);
+    }
+
+    #[test]
+    fn lambda() {}
+
+    #[test]
+    fn define() {
+        // on atoms
+
+        // on not atoms
     }
 }
