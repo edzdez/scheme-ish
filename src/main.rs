@@ -1,4 +1,7 @@
-use scheme_ish::{lexer::LexError, lexer::Lexer, parser::ParseError, parser::Parser};
+use scheme_ish::evaluator::{EvalError, Evaluator};
+use scheme_ish::lexer::{LexError, Lexer};
+use scheme_ish::parser::{ParseError, Parser};
+
 use std::io;
 use std::io::Write;
 use thiserror::Error;
@@ -12,11 +15,16 @@ fn print_help_message() {
 fn evaluate(buffer: &str) -> Result<(), ReplError> {
     let mut tokenizer = Lexer::new();
     let mut parser = Parser::new();
+    let mut evaluator = Evaluator::new();
 
-    tokenizer.tokenize(buffer)?;
+    tokenizer.tokenize(&buffer)?;
     parser.parse(&mut tokenizer.tokens.into_iter())?;
 
-    println!("{:#?}", parser.ast);
+    for expr in parser.ast {
+        let out = evaluator.evaluate(expr)?;
+        println!("{:?}", out);
+    }
+
     Ok(())
 }
 
@@ -63,6 +71,9 @@ pub enum ReplError {
 
     #[error("Parser error")]
     Parse(#[from] ParseError),
+
+    #[error("Eval error")]
+    Eval(#[from] EvalError),
 
     #[error("IO error")]
     IO(#[from] io::Error),
