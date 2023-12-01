@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 
 use crate::expr::*;
+use crate::lexer::{LexError, Lexer};
+use crate::parser::{ParseError, Parser};
 use crate::tokens::Token;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::{Display, Formatter};
 use std::iter::zip;
+use std::{fs, io};
 use thiserror::Error;
 
 macro_rules! eager {
@@ -132,10 +135,11 @@ impl Evaluator {
                 Expr::Atom(Token::Ident(f)) => match f.as_str() {
                     // special forms
                     "define" => Self::define_(args, env),
-                    "lambda" => Self::lambda_(args),
                     "cond" => Self::cond_(args, env),
                     "if" => Self::if_(args, env),
                     "begin" => Self::begin_(args, env),
+                    "load" => Self::load_(args, env),
+                    "lambda" => Self::lambda_(args),
 
                     // builtins
                     "cons" => eager!(args, env, Self::cons),
@@ -291,7 +295,6 @@ impl Evaluator {
 
     fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
-
         Self::validate_arity(&args, 3)?;
 
         let alternative = args.pop().unwrap();
@@ -302,6 +305,28 @@ impl Evaluator {
             Value::Bool(true) => Self::eval(consequent, env),
             Value::Bool(false) => Self::eval(alternative, env),
             _ => Err(EvalError::InvalidArguments),
+        }
+    }
+
+    fn load_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
+        let args = Self::flatten_args(args)?;
+        let mut args = Self::eval_args(args, env)?;
+        Self::validate_arity(&args, 1)?;
+
+        if let Value::String(filename) = args.pop().unwrap() {
+            let contents = fs::read_to_string(filename)?;
+            let mut tokenizer = Lexer::new();
+            let mut parser = Parser::new();
+
+            tokenizer.tokenize(&contents)?;
+            parser.parse(&mut tokenizer.tokens.into_iter())?;
+
+            for expr in parser.ast {
+                Self::eval(expr, env)?;
+            }
+            Ok(Value::Unit)
+        } else {
+            Err(EvalError::InvalidArguments)
         }
     }
 
@@ -460,7 +485,7 @@ impl Evaluator {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum EvalError {
     #[error("Unknown Identifier")]
     UnknownIdent,
@@ -473,6 +498,15 @@ pub enum EvalError {
 
     #[error("Argument Error")]
     InvalidArguments,
+
+    #[error("Lexer error")]
+    Lex(#[from] LexError),
+
+    #[error("Parser error")]
+    Parse(#[from] ParseError),
+
+    #[error("IO error")]
+    IO(#[from] io::Error),
 }
 
 #[cfg(test)]
@@ -495,8 +529,8 @@ mod tests {
             evaluator.evaluate(parser.ast[0].clone()).expect("what");
             let out = evaluator.evaluate(parser.ast[1].clone());
 
-            let expected = Ok(Value::Number(5));
-            assert_eq!(expected, out);
+            let expected = Value::Number(5);
+            assert_eq!(expected, out.unwrap());
         }
 
         // on not atoms
@@ -513,8 +547,8 @@ mod tests {
             evaluator.evaluate(parser.ast[0].clone()).expect("what");
             let out = evaluator.evaluate(parser.ast[1].clone());
 
-            let expected = Ok(Value::Number(12345));
-            assert_eq!(expected, out);
+            let expected = Value::Number(12345);
+            assert_eq!(expected, out.unwrap());
         }
     }
 
@@ -530,7 +564,7 @@ mod tests {
         let mut evaluator = Evaluator::new();
         let out = evaluator.evaluate(parser.ast[0].clone());
 
-        let expected = Ok(Value::Number(44));
-        assert_eq!(expected, out);
+        let expected = Value::Number(44);
+        assert_eq!(expected, out.unwrap());
     }
 }
