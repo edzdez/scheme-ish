@@ -53,3 +53,7 @@
         init
         (f (car l) (reduce f init (cdr l))))))
 
+(define list
+  (lambda (. x)
+    x))
+

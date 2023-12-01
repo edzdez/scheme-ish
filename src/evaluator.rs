@@ -221,6 +221,8 @@ impl Evaluator {
             out.push(arg);
         }
 
+        println!("{:?}", &out);
+
         Ok(out)
     }
 
@@ -228,12 +230,40 @@ impl Evaluator {
         params: &Vec<Token>,
         args: Vec<Value>,
     ) -> Result<Environment<'a>, EvalError> {
-        Self::validate_arity(&args, params.len())?;
-
         let mut out = Environment::default();
-        let mut iter = zip(params, args);
-        while let Some((Token::Ident(param), arg)) = iter.next() {
-            out.add(param.to_string(), arg);
+
+        if params.len() >= 2 && params[params.len() - 2] == Token::Ident(String::from(".")) {
+            if args.len() < params.len() - 2 {
+                return Err(EvalError::ArityError);
+            }
+
+            let mut args = args;
+            let mut iter = zip(
+                &params[0..params.len() - 2],
+                args.drain(0..params.len() - 2),
+            );
+            while let Some((Token::Ident(param), arg)) = iter.next() {
+                out.add(param.to_string(), arg);
+            }
+
+            drop(iter);
+            if let Some(Token::Ident(param)) = params.last() {
+                let mut var = args.into_iter().collect::<LinkedList<_>>();
+                let var = if var.is_empty() {
+                    Value::Nil
+                } else {
+                    var.push_back(Value::Nil);
+                    Value::List(var)
+                };
+
+                out.add(param.to_owned(), var);
+            }
+        } else {
+            Self::validate_arity(&args, params.len())?;
+            let mut iter = zip(params, args);
+            while let Some((Token::Ident(param), arg)) = iter.next() {
+                out.add(param.to_string(), arg);
+            }
         }
 
         Ok(out)
@@ -281,10 +311,13 @@ impl Evaluator {
         let params = args[0].clone();
         let body = args.drain(1..).collect();
 
+        // dbg!(Self::flatten_args(Some(Box::new(params.clone())))?);
         let mut params_iter = Self::flatten_args(Some(Box::new(params)))?.into_iter();
         let mut params = Vec::new();
 
+        let mut dot = false;
         while let Some(Expr::Atom(Token::Ident(id))) = params_iter.next() {
+            dot |= id == String::from(".");
             params.push(Token::Ident(id));
         }
 
@@ -299,11 +332,11 @@ impl Evaluator {
         //
         // }
 
-        Ok(Value::Function(Func {
-            params,
-            body,
-            // closed_env_vtable,
-        }))
+        if dot && params[params.len() - 2] != Token::Ident(String::from(".")) {
+            return Err(EvalError::InvalidArguments);
+        }
+
+        Ok(Value::Function(Func { params, body }))
     }
 
     fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
