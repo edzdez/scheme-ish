@@ -133,10 +133,7 @@ impl Evaluator {
             Token::Number(n) => Ok(Value::Number(n)),
             Token::Char(c) => Ok(Value::Char(c)),
             Token::String(s) => Ok(Value::String(s)),
-            Token::Ident(id) => env
-                .find(&id)
-                .map(|x| x.clone())
-                .ok_or(EvalError::UnknownIdent),
+            Token::Ident(id) => env.find(&id).cloned().ok_or(EvalError::UnknownIdent),
             Token::LParen | Token::RParen => unreachable!("not atoms"),
         }
     }
@@ -155,9 +152,8 @@ impl Evaluator {
 
     fn eval_args(args: Vec<Expr>, env: &mut Environment) -> Result<Vec<Value>, EvalError> {
         let mut out = Vec::<Value>::new();
-        let mut iter = args.into_iter();
 
-        while let Some(expr) = iter.next() {
+        for expr in args {
             let arg = Self::eval(expr, env)?;
             out.push(arg);
         }
@@ -182,7 +178,7 @@ impl Evaluator {
 
     fn validate_arity<T>(args: &Vec<T>, arity: usize) -> Result<(), EvalError> {
         if args.len() != arity {
-            Err(EvalError::WrongNoArgs)
+            Err(EvalError::ArityError)
         } else {
             Ok(())
         }
@@ -254,20 +250,20 @@ impl Evaluator {
         let mut args_iter = Self::flatten_args(args)?.into_iter();
         while let Some(Expr::Pair(Some(pred), Some(cons))) = args_iter.next() {
             if *pred == Expr::Atom(Token::Ident(String::from("else"))) {
-                if let Expr::Pair(Some(cons), None) = *cons {
-                    return Self::eval(*cons, env);
+                return if let Expr::Pair(Some(cons), None) = *cons {
+                    Self::eval(*cons, env)
                 } else {
-                    return Err(EvalError::InvalidArguments);
-                }
+                    Err(EvalError::InvalidArguments)
+                };
             }
 
             let pred = Self::eval(*pred, env)?;
             if pred == Value::Bool(true) {
-                if let Expr::Pair(Some(cons), None) = *cons {
-                    return Self::eval(*cons, env);
+                return if let Expr::Pair(Some(cons), None) = *cons {
+                    Self::eval(*cons, env)
                 } else {
-                    return Err(EvalError::InvalidArguments);
-                }
+                    Err(EvalError::InvalidArguments)
+                };
             } else if pred != Value::Bool(false) {
                 return Err(EvalError::InvalidArguments);
             }
@@ -356,7 +352,7 @@ pub enum EvalError {
     UnknownIdent,
 
     #[error("Wrong number of arguments")]
-    WrongNoArgs,
+    ArityError,
 
     #[error("Arithmetic Error")]
     ArithmeticError,
