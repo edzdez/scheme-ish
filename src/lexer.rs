@@ -134,7 +134,7 @@ impl Lexer {
             return None;
         }
 
-        if !(self.line.front() == Some(&'\'')) || !(self.line.get(2) == Some(&'\'')) {
+        if self.line.front() != Some(&'\'') || self.line.get(2) != Some(&'\'') {
             return None;
         }
 

@@ -2,13 +2,14 @@ use scheme_ish::evaluator::{EvalError, Evaluator};
 use scheme_ish::lexer::{LexError, Lexer};
 use scheme_ish::parser::{ParseError, Parser};
 
-use std::io;
 use std::io::Write;
+use std::{fs, io};
 use thiserror::Error;
 
 fn print_help_message() {
     println!("Help:");
     println!(":h\thelp");
+    println!(":l\tload");
     println!(":q\tquit");
 }
 
@@ -39,6 +40,11 @@ fn repl(evaluator: &mut Evaluator) -> Result<bool, ReplError> {
         Ok(false)
     } else if buffer == ":h" {
         print_help_message();
+        Ok(true)
+    } else if buffer.starts_with(":l ") {
+        let contents = fs::read_to_string(buffer.strip_prefix(":l ").unwrap())?;
+        let contents = contents.trim();
+        evaluate(contents, evaluator)?;
         Ok(true)
     } else {
         evaluate(buffer, evaluator)?;
