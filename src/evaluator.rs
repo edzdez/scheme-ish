@@ -18,7 +18,7 @@ macro_rules! eager {
     }};
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
     pub parent: Option<&'a Environment<'a>>,
@@ -52,6 +52,7 @@ impl<'a> Environment<'a> {
 pub struct Func {
     params: Vec<Token>, // these should only be identifiers
     body: Vec<Expr>,
+    // closed_env_vtable: HashMap<String, Value>, // the environment that is closed over
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,7 +180,8 @@ impl Evaluator {
 
     fn eval_func(func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut new_env = Self::process_args(&func.params, args)?;
-        new_env.parent = Some(&env);
+        new_env.parent = Some(env);
+        // dbg!(&new_env);
 
         let mut out = Value::Unit;
         for expr in func.body {
@@ -290,7 +292,18 @@ impl Evaluator {
             return Err(EvalError::InvalidArguments);
         }
 
-        Ok(Value::Function(Func { params, body }))
+        // TODO: Closures
+        // let mut closed_env_vtable = HashMap::new();
+        // for expr in body {
+        //     let flattened = Self::flatten_args(Some(Box::new(expr)))?;
+        //
+        // }
+
+        Ok(Value::Function(Func {
+            params,
+            body,
+            // closed_env_vtable,
+        }))
     }
 
     fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
