@@ -3,6 +3,7 @@
 use crate::expr::*;
 use crate::tokens::Token;
 use std::collections::{HashMap, LinkedList};
+use std::fmt::{Display, Formatter};
 use std::iter::zip;
 use thiserror::Error;
 
@@ -62,6 +63,54 @@ pub enum Value {
     Unit,
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(s) => {
+                write!(f, "\"{}\"", s)
+            }
+            Value::Char(c) => {
+                write!(f, "'{}'", c)
+            }
+            Value::Number(n) => {
+                write!(f, "{}", n)
+            }
+            Value::Bool(b) => {
+                write!(f, "{}", if *b { "#t" } else { "#f" })
+            }
+            Value::List(l) => {
+                let back = l.back().expect("the world is ending");
+                let mut idx = 1;
+                let len = l.len();
+
+                write!(f, "( ")?;
+                for v in l {
+                    if idx == len {
+                        if *back != Value::Nil {
+                            write!(f, ". {} ", v)?;
+                        }
+                    } else {
+                        write!(f, "{} ", v)?;
+                    }
+
+                    idx += 1;
+                }
+
+                write!(f, ")")
+            }
+            Value::Function(func) => {
+                write!(f, "#function_{:p}", func)
+            }
+            Value::Nil => {
+                write!(f, "nil")
+            }
+            Value::Unit => {
+                write!(f, "Unit")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Evaluator {
     global: Environment<'static>,
@@ -93,6 +142,7 @@ impl Evaluator {
                     "car" => eager!(args, env, Self::car),
                     "cdr" => eager!(args, env, Self::cdr),
                     "+" => eager!(args, env, Self::plus),
+                    "equal?" => eager!(args, env, Self::equal),
                     "-" => eager!(args, env, Self::subtract),
                     _ => {
                         if let Some(Value::Function(func)) = env.find(&f) {
@@ -278,7 +328,17 @@ impl Evaluator {
 
     fn cons(args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2)?;
-        Ok(Value::List(args.into_iter().collect()))
+
+        let mut args = args;
+        let cdr = args.pop().unwrap();
+        let car = args.pop().unwrap();
+
+        Ok(if let Value::List(mut l) = cdr {
+            l.push_front(car);
+            Value::List(l)
+        } else {
+            Value::List(LinkedList::from([car, cdr]))
+        })
     }
 
     fn car(args: Vec<Value>) -> Result<Value, EvalError> {
@@ -343,6 +403,13 @@ impl Evaluator {
             }
         }
         Ok(Value::Number(sum))
+    }
+
+    fn equal(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2)?;
+        let mut args = args;
+
+        Ok(Value::Bool(args.pop() == args.pop()))
     }
 }
 

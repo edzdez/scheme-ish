@@ -17,12 +17,12 @@ fn evaluate(buffer: &str, evaluator: &mut Evaluator) -> Result<(), ReplError> {
     let mut tokenizer = Lexer::new();
     let mut parser = Parser::new();
 
-    tokenizer.tokenize(&buffer)?;
+    tokenizer.tokenize(buffer)?;
     parser.parse(&mut tokenizer.tokens.into_iter())?;
 
     for expr in parser.ast {
         let out = evaluator.evaluate(expr)?;
-        println!("{:?}", out);
+        println!("{}", out);
     }
 
     Ok(())
