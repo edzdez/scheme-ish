@@ -59,7 +59,7 @@ fn main() {
                 break;
             }
             Err(e) => {
-                println!("{}: {:?}", e, e);
+                println!("Error: {}", e);
             }
         }
     }
@@ -67,15 +67,15 @@ fn main() {
 
 #[derive(Error, Debug)]
 pub enum ReplError {
-    #[error("Lexer error")]
+    #[error("{0}")]
     Lex(#[from] LexError),
 
-    #[error("Parser error")]
+    #[error("{0}")]
     Parse(#[from] ParseError),
 
-    #[error("Eval error")]
+    #[error("{0}")]
     Eval(#[from] EvalError),
 
-    #[error("IO error")]
+    #[error("{0}")]
     IO(#[from] io::Error),
 }
