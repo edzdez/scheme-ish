@@ -2,16 +2,6 @@
 
 (define arr (cons 1 (cons 3 (cons 2 (cons 6 (cons 7 nil))))))
 
-(define nil?
-  (lambda (l)
-    (equal? l nil)))
-
-(define len
-  (lambda (l)
-    (if (nil? l)
-      0
-      (+ 1 (len (cdr l))))))
-
 (define slice
   (lambda (l start end)
     (define take-start
