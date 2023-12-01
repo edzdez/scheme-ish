@@ -199,7 +199,11 @@ impl Evaluator {
         }
     }
 
-    fn eval_func(mut func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
+    fn eval_func(
+        mut func: Func,
+        args: Vec<Value>,
+        env: &mut Environment,
+    ) -> Result<Value, EvalError> {
         let mut new_env = Self::process_args(&func.params, args)?;
         std::mem::swap(&mut new_env.vtable, &mut func.env);
         new_env.parent = Some(env);
@@ -253,9 +257,7 @@ impl Evaluator {
         let mut out = Environment::default();
 
         if params.len() >= 2 && params[params.len() - 2] == Token::Ident(String::from(".")) {
-            if args.len() < params.len() - 2 {
-                return Err(EvalError::ArityError);
-            }
+            Self::validate_arity(&args, params.len() - 2, &usize::ge)?;
 
             let mut args = args;
             let mut iter = zip(
@@ -279,7 +281,7 @@ impl Evaluator {
                 out.add(param.to_owned(), var);
             }
         } else {
-            Self::validate_arity(&args, params.len())?;
+            Self::validate_arity(&args, params.len(), &usize::eq)?;
             let mut iter = zip(params, args);
             while let Some((Token::Ident(param), arg)) = iter.next() {
                 out.add(param.to_string(), arg);
@@ -289,8 +291,12 @@ impl Evaluator {
         Ok(out)
     }
 
-    fn validate_arity<T>(args: &Vec<T>, arity: usize) -> Result<(), EvalError> {
-        if args.len() != arity {
+    fn validate_arity<T>(
+        args: &Vec<T>,
+        arity: usize,
+        good_comp: &'static dyn Fn(&usize, &usize) -> bool,
+    ) -> Result<(), EvalError> {
+        if !good_comp(&args.len(), &arity) {
             Err(EvalError::ArityError)
         } else {
             Ok(())
@@ -299,9 +305,7 @@ impl Evaluator {
 
     fn define_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let args = Self::flatten_args(args)?;
-        if args.len() < 2 {
-            return Err(EvalError::InvalidArguments);
-        }
+        Self::validate_arity(&args, 2, &usize::ge)?;
 
         let name;
         if let Expr::Atom(Token::Ident(n)) = &args[0] {
@@ -324,9 +328,7 @@ impl Evaluator {
 
     fn lambda_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
-        if args.len() < 2 {
-            return Err(EvalError::InvalidArguments);
-        }
+        Self::validate_arity(&args, 2, &usize::ge)?;
 
         let params = args[0].clone();
         let body = args.drain(1..).collect();
@@ -353,7 +355,7 @@ impl Evaluator {
 
     fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
-        Self::validate_arity(&args, 3)?;
+        Self::validate_arity(&args, 3, &usize::eq)?;
 
         let alternative = args.pop().unwrap();
         let consequent = args.pop().unwrap();
@@ -369,7 +371,7 @@ impl Evaluator {
     fn load_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let args = Self::flatten_args(args)?;
         let mut args = Self::eval_args(args, env)?;
-        Self::validate_arity(&args, 1)?;
+        Self::validate_arity(&args, 1, &usize::eq)?;
 
         if let Value::String(filename) = args.pop().unwrap() {
             let contents = fs::read_to_string(filename)?;
@@ -429,7 +431,7 @@ impl Evaluator {
     }
 
     fn cons(mut args: Vec<Value>) -> Result<Value, EvalError> {
-        Self::validate_arity(&args, 2)?;
+        Self::validate_arity(&args, 2, &usize::eq)?;
         let cdr = args.pop().unwrap();
         let car = args.pop().unwrap();
 
@@ -442,7 +444,7 @@ impl Evaluator {
     }
 
     fn car(args: Vec<Value>) -> Result<Value, EvalError> {
-        Self::validate_arity(&args, 1)?;
+        Self::validate_arity(&args, 1, &usize::eq)?;
         if let Value::List(l) = &args[0] {
             if l.is_empty() {
                 Err(EvalError::InvalidArguments)
@@ -455,7 +457,7 @@ impl Evaluator {
     }
 
     fn cdr(mut args: Vec<Value>) -> Result<Value, EvalError> {
-        Self::validate_arity(&args, 1)?;
+        Self::validate_arity(&args, 1, &usize::eq)?;
 
         if let Value::List(mut l) = args.pop().unwrap() {
             if l.is_empty() {
@@ -474,9 +476,7 @@ impl Evaluator {
     }
 
     fn subtract(args: Vec<Value>) -> Result<Value, EvalError> {
-        if args.len() < 2 {
-            return Err(EvalError::InvalidArguments);
-        }
+        Self::validate_arity(&args, 2, &usize::ge)?;
 
         let mut sum = 0;
         if let Value::Number(x) = &args[0] {
@@ -495,9 +495,7 @@ impl Evaluator {
     }
 
     fn plus(args: Vec<Value>) -> Result<Value, EvalError> {
-        if args.len() < 2 {
-            return Err(EvalError::InvalidArguments);
-        }
+        Self::validate_arity(&args, 2, &usize::ge)?;
 
         let mut sum = 0;
         for val in args {
@@ -511,12 +509,12 @@ impl Evaluator {
     }
 
     fn equal(mut args: Vec<Value>) -> Result<Value, EvalError> {
-        Self::validate_arity(&args, 2)?;
+        Self::validate_arity(&args, 2, &usize::eq)?;
         Ok(Value::Bool(args.pop() == args.pop()))
     }
 
     fn less(mut args: Vec<Value>) -> Result<Value, EvalError> {
-        Self::validate_arity(&args, 2)?;
+        Self::validate_arity(&args, 2, &usize::eq)?;
         if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
             Ok(Value::Bool(b < a))
         } else {
@@ -525,7 +523,7 @@ impl Evaluator {
     }
 
     fn greater(mut args: Vec<Value>) -> Result<Value, EvalError> {
-        Self::validate_arity(&args, 2)?;
+        Self::validate_arity(&args, 2, &usize::eq)?;
         if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
             Ok(Value::Bool(b > a))
         } else {
