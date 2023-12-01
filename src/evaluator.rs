@@ -179,7 +179,7 @@ impl Evaluator {
                                 let args = Self::eval_args(args, env)?;
                                 func(args)
                             }
-                            _ => Err(EvalError::InvalidArguments),
+                            _ => Err(EvalError::NotAFunction),
                         }
                     }
                 },
@@ -190,7 +190,7 @@ impl Evaluator {
                         let args = Self::eval_args(args, env)?;
                         Self::eval_func(func, args, env)
                     } else {
-                        Err(EvalError::InvalidArguments)
+                        Err(EvalError::NotAFunction)
                     }
                 }
             },
@@ -222,7 +222,7 @@ impl Evaluator {
             Token::Number(n) => Ok(Value::Number(n)),
             Token::Char(c) => Ok(Value::Char(c)),
             Token::String(s) => Ok(Value::String(s)),
-            Token::Ident(id) => env.find(&id).cloned().ok_or(EvalError::UnknownIdent),
+            Token::Ident(id) => env.find(&id).cloned().ok_or(EvalError::UnknownIdent(id)),
             Token::LParen | Token::RParen => unreachable!("not atoms"),
         }
     }
@@ -311,7 +311,7 @@ impl Evaluator {
         if let Expr::Atom(Token::Ident(n)) = &args[0] {
             name = n.clone();
         } else {
-            return Err(EvalError::InvalidArguments);
+            return Err(EvalError::DefineArgMustBeIdent);
         }
 
         let mut args = args.into_iter();
@@ -343,11 +343,11 @@ impl Evaluator {
         }
 
         if params_iter.next().is_some() {
-            return Err(EvalError::InvalidArguments);
+            return Err(EvalError::ExpectedArgumentList);
         }
 
         if dot && params[params.len() - 2] != Token::Ident(String::from(".")) {
-            return Err(EvalError::InvalidArguments);
+            return Err(EvalError::ExpectedArgumentList);
         }
 
         Ok(Value::Function(Func::new(params, body, env)))
@@ -534,10 +534,10 @@ impl Evaluator {
 
 #[derive(Error, Debug)]
 pub enum EvalError {
-    #[error("Unknown Identifier")]
-    UnknownIdent,
+    #[error("Unknown Identifier: `{0}`")]
+    UnknownIdent(String),
 
-    #[error("Wrong number of arguments")]
+    #[error("Arity mismatch")]
     ArityError,
 
     #[error("Arithmetic Error")]
@@ -545,6 +545,15 @@ pub enum EvalError {
 
     #[error("Argument Error")]
     InvalidArguments,
+
+    #[error("Not a function")]
+    NotAFunction,
+
+    #[error("The first argument to define must be an ident")]
+    DefineArgMustBeIdent,
+
+    #[error("Expected argument list, found none")]
+    ExpectedArgumentList,
 
     #[error("Lexer error")]
     Lex(#[from] LexError),
