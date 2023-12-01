@@ -586,7 +586,8 @@ mod tests {
             let out = evaluator.evaluate(parser.ast[1].clone());
 
             let expected = Value::Number(5);
-            assert_eq!(expected, out.unwrap());
+            assert!(expected == out.unwrap()); // we use assert instead of assert_eq because Value
+                                               // doesn't impl debug
         }
 
         // on not atoms
@@ -604,7 +605,8 @@ mod tests {
             let out = evaluator.evaluate(parser.ast[1].clone());
 
             let expected = Value::Number(12345);
-            assert_eq!(expected, out.unwrap());
+            assert!(expected == out.unwrap()); // we use assert instead of assert_eq because Value
+                                               // doesn't impl debug
         }
     }
 
@@ -621,6 +623,7 @@ mod tests {
         let out = evaluator.evaluate(parser.ast[0].clone());
 
         let expected = Value::Number(44);
-        assert_eq!(expected, out.unwrap());
+        assert!(expected == out.unwrap()); // we use assert instead of assert_eq because Value
+                                           // doesn't impl debug
     }
 }
