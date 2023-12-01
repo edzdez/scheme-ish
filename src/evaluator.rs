@@ -555,13 +555,13 @@ pub enum EvalError {
     #[error("Expected argument list, found none")]
     ExpectedArgumentList,
 
-    #[error("Lexer error")]
+    #[error("{0}")]
     Lex(#[from] LexError),
 
-    #[error("Parser error")]
+    #[error("{0}")]
     Parse(#[from] ParseError),
 
-    #[error("IO error")]
+    #[error("{0}")]
     IO(#[from] io::Error),
 }
 
