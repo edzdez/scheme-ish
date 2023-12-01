@@ -48,7 +48,7 @@ impl<'a> Environment<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
     params: Vec<Token>, // these should only be identifiers
-    body: Expr,
+    body: Vec<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -176,7 +176,12 @@ impl Evaluator {
     fn eval_func(func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut new_env = Self::process_args(&func.params, args)?;
         new_env.parent = Some(&env);
-        Self::eval(func.body, &mut new_env)
+
+        let mut out = Value::Unit;
+        for expr in func.body {
+            out = Self::eval(expr, &mut new_env)?;
+        }
+        Ok(out)
     }
 
     fn eval_atom(t: Token, env: &mut Environment) -> Result<Value, EvalError> {
@@ -237,27 +242,39 @@ impl Evaluator {
     }
 
     fn define_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
-        let mut args = Self::flatten_args(args)?;
-        Self::validate_arity(&args, 2)?;
-
-        let value = Self::eval(args.pop().unwrap(), env)?;
-        match args.pop().unwrap() {
-            Expr::Atom(Token::Ident(name)) => {
-                env.add(name, value);
-            }
-            _ => return Err(EvalError::InvalidArguments),
+        let args = Self::flatten_args(args)?;
+        if args.len() < 2 {
+            return Err(EvalError::InvalidArguments);
         }
 
+        let name;
+        if let Expr::Atom(Token::Ident(n)) = &args[0] {
+            name = n.clone();
+        } else {
+            return Err(EvalError::InvalidArguments);
+        }
+
+        let mut args = args.into_iter();
+        args.next();
+
+        let mut last = Value::Unit;
+        for arg in args {
+            last = Self::eval(arg, env)?;
+        }
+
+        env.add(name, last);
         Ok(Value::Unit)
     }
 
     fn lambda_(args: Option<Box<Expr>>) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
-        Self::validate_arity(&args, 2)?;
+        if args.len() < 2 {
+            return Err(EvalError::InvalidArguments);
+        }
 
-        let body = args.pop().unwrap();
+        let params = args[0].clone();
+        let body = args.drain(1..).collect();
 
-        let params = args.pop().unwrap();
         let mut params_iter = Self::flatten_args(Some(Box::new(params)))?.into_iter();
         let mut params = Vec::new();
 
@@ -427,7 +444,6 @@ impl Evaluator {
         if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
             Ok(Value::Bool(b < a))
         } else {
-            dbg!("is it me?");
             Err(EvalError::InvalidArguments)
         }
     }
