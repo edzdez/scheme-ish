@@ -57,6 +57,7 @@ fn main() {
 
     println!("Welcome to scheme-ish!");
     println!("Type :h for help");
+    println!("Don't bother trying to use arrow keys---MIT Scheme doesn't let you use them in the repl either");
     loop {
         match repl(&mut evaluator) {
             Ok(true) => {}

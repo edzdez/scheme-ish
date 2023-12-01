@@ -141,9 +141,11 @@ impl Evaluator {
                     "cons" => eager!(args, env, Self::cons),
                     "car" => eager!(args, env, Self::car),
                     "cdr" => eager!(args, env, Self::cdr),
-                    "+" => eager!(args, env, Self::plus),
                     "equal?" => eager!(args, env, Self::equal),
+                    "+" => eager!(args, env, Self::plus),
                     "-" => eager!(args, env, Self::subtract),
+                    "<" => eager!(args, env, Self::less),
+                    ">" => eager!(args, env, Self::greater),
                     _ => {
                         if let Some(Value::Function(func)) = env.find(&f) {
                             let func = func.clone();
@@ -356,12 +358,18 @@ impl Evaluator {
 
     fn cdr(args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 1)?;
-        if let Value::List(mut l) = args[0].clone() {
+        let mut args = args;
+
+        if let Value::List(mut l) = args.pop().unwrap() {
             if l.is_empty() {
                 Err(EvalError::InvalidArguments)
             } else {
                 l.pop_front();
-                Ok(Value::List(l))
+                if l.front().is_some_and(|v| *v == Value::Nil) {
+                    Ok(Value::Nil)
+                } else {
+                    Ok(Value::List(l))
+                }
             }
         } else {
             Err(EvalError::InvalidArguments)
@@ -410,6 +418,29 @@ impl Evaluator {
         let mut args = args;
 
         Ok(Value::Bool(args.pop() == args.pop()))
+    }
+
+    fn less(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2)?;
+        let mut args = args;
+
+        if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
+            Ok(Value::Bool(b < a))
+        } else {
+            dbg!("is it me?");
+            Err(EvalError::InvalidArguments)
+        }
+    }
+
+    fn greater(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2)?;
+        let mut args = args;
+
+        if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
+            Ok(Value::Bool(b > a))
+        } else {
+            Err(EvalError::InvalidArguments)
+        }
     }
 }
 
