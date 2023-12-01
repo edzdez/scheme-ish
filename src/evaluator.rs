@@ -86,6 +86,7 @@ impl Evaluator {
                     "lambda" => Self::lambda_(args),
                     "cond" => Self::cond_(args, env),
                     "if" => Self::if_(args, env),
+                    "begin" => Self::begin_(args, env),
 
                     // builtins
                     "cons" => eager!(args, env, Self::cons),
@@ -237,6 +238,16 @@ impl Evaluator {
             Value::Bool(false) => Self::eval(alternative, env),
             _ => Err(EvalError::InvalidArguments),
         }
+    }
+
+    fn begin_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
+        let args = Self::flatten_args(args)?;
+        let mut out = Value::Unit;
+        for arg in args {
+            out = Self::eval(arg, env)?;
+        }
+
+        Ok(out)
     }
 
     fn cond_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
