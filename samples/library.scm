@@ -36,16 +36,16 @@
 
 
 (define map
-  (lambda (l f)
+  (lambda (f l)
     (if (nil? l)
         nil
-        (cons (f (car l)) (map (cdr l) f)))))
+        (cons (f (car l)) (map f (cdr l))))))
 
 (define filter
-  (lambda (l f)
+  (lambda (f l)
     (cond ((nil? l) nil)
-          ((f (car l)) (cons (car l) (filter (cdr l) f)))
-          (else (filter (cdr l) f)))))
+          ((f (car l)) (cons (car l) (filter f (cdr l))))
+          (else (filter f (cdr l))))))
 
 (define reduce
   (lambda (f init l)

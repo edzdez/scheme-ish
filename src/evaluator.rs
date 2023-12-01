@@ -10,15 +10,7 @@ use std::iter::zip;
 use std::{fs, io};
 use thiserror::Error;
 
-macro_rules! eager {
-    ($args:expr,$env:expr,$f:expr) => {{
-        let args = Self::flatten_args($args)?;
-        let args = Self::eval_args(args, $env)?;
-        $f(args)
-    }};
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
     pub parent: Option<&'a Environment<'a>>,
@@ -28,6 +20,17 @@ impl Default for Environment<'_> {
     fn default() -> Self {
         let mut vtable = HashMap::new();
         vtable.insert(String::from("nil"), Value::Nil);
+        vtable.insert(String::from("+"), Value::BuiltinFunc(&Evaluator::plus));
+        vtable.insert(String::from("-"), Value::BuiltinFunc(&Evaluator::subtract));
+        vtable.insert(String::from("<"), Value::BuiltinFunc(&Evaluator::less));
+        vtable.insert(String::from(">"), Value::BuiltinFunc(&Evaluator::greater));
+        vtable.insert(String::from("cons"), Value::BuiltinFunc(&Evaluator::cons));
+        vtable.insert(String::from("car"), Value::BuiltinFunc(&Evaluator::car));
+        vtable.insert(String::from("cdr"), Value::BuiltinFunc(&Evaluator::cdr));
+        vtable.insert(
+            String::from("equal?"),
+            Value::BuiltinFunc(&Evaluator::equal),
+        );
 
         Self {
             vtable,
@@ -55,7 +58,7 @@ pub struct Func {
     // closed_env_vtable: HashMap<String, Value>, // the environment that is closed over
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Value {
     String(String),
     Char(char),
@@ -63,25 +66,33 @@ pub enum Value {
     Bool(bool),
     List(LinkedList<Value>),
     Function(Func),
+    BuiltinFunc(&'static dyn Fn(Vec<Value>) -> Result<Value, EvalError>),
     Nil,
     Unit,
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Char(l0), Self::Char(r0)) => l0 == r0,
+            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::List(l0), Self::List(r0)) => l0 == r0,
+            (Self::Function(l0), Self::Function(r0)) => l0 == r0,
+            (Self::BuiltinFunc(_), Self::BuiltinFunc(_)) => false,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::String(s) => {
-                write!(f, "\"{}\"", s)
-            }
-            Value::Char(c) => {
-                write!(f, "'{}'", c)
-            }
-            Value::Number(n) => {
-                write!(f, "{}", n)
-            }
-            Value::Bool(b) => {
-                write!(f, "{}", if *b { "#t" } else { "#f" })
-            }
+            Value::String(s) => write!(f, "\"{}\"", s),
+            Value::Char(c) => write!(f, "'{}'", c),
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Bool(b) => write!(f, "{}", if *b { "#t" } else { "#f" }),
             Value::List(l) => {
                 let back = l.back().expect("the world is ending");
                 let mut idx = 1;
@@ -102,20 +113,15 @@ impl Display for Value {
 
                 write!(f, ")")
             }
-            Value::Function(func) => {
-                write!(f, "#function_{:p}", func)
-            }
-            Value::Nil => {
-                write!(f, "nil")
-            }
-            Value::Unit => {
-                write!(f, "Unit")
-            }
+            Value::Function(func) => write!(f, "#function_{:p}", func),
+            Value::Nil => write!(f, "nil"),
+            Value::Unit => write!(f, "Unit"),
+            Value::BuiltinFunc(func) => write!(f, "#function_{:p}", func),
         }
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Evaluator {
     global: Environment<'static>,
 }
@@ -142,23 +148,21 @@ impl Evaluator {
                     "load" => Self::load_(args, env),
                     "lambda" => Self::lambda_(args),
 
-                    // builtins
-                    "cons" => eager!(args, env, Self::cons),
-                    "car" => eager!(args, env, Self::car),
-                    "cdr" => eager!(args, env, Self::cdr),
-                    "equal?" => eager!(args, env, Self::equal),
-                    "+" => eager!(args, env, Self::plus),
-                    "-" => eager!(args, env, Self::subtract),
-                    "<" => eager!(args, env, Self::less),
-                    ">" => eager!(args, env, Self::greater),
                     _ => {
-                        if let Some(Value::Function(func)) = env.find(&f) {
-                            let func = func.clone();
-                            let args = Self::flatten_args(args)?;
-                            let args = Self::eval_args(args, env)?;
-                            Self::eval_func(func, args, env)
-                        } else {
-                            Err(EvalError::InvalidArguments)
+                        let val = env.find(&f);
+                        match val {
+                            Some(Value::Function(func)) => {
+                                let func = func.clone();
+                                let args = Self::flatten_args(args)?;
+                                let args = Self::eval_args(args, env)?;
+                                Self::eval_func(func, args, env)
+                            }
+                            Some(&Value::BuiltinFunc(func)) => {
+                                let args = Self::flatten_args(args)?;
+                                let args = Self::eval_args(args, env)?;
+                                func(args)
+                            }
+                            _ => Err(EvalError::InvalidArguments),
                         }
                     }
                 },
@@ -181,7 +185,6 @@ impl Evaluator {
     fn eval_func(func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut new_env = Self::process_args(&func.params, args)?;
         new_env.parent = Some(env);
-        // dbg!(&new_env);
 
         let mut out = Value::Unit;
         for expr in func.body {
@@ -220,8 +223,6 @@ impl Evaluator {
             let arg = Self::eval(expr, env)?;
             out.push(arg);
         }
-
-        println!("{:?}", &out);
 
         Ok(out)
     }
@@ -311,7 +312,6 @@ impl Evaluator {
         let params = args[0].clone();
         let body = args.drain(1..).collect();
 
-        // dbg!(Self::flatten_args(Some(Box::new(params.clone())))?);
         let mut params_iter = Self::flatten_args(Some(Box::new(params)))?.into_iter();
         let mut params = Vec::new();
 
