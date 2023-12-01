@@ -1,5 +1,3 @@
-; WARNING THIS DOES NOT WORK YET
-
 (load "samples/library.scm")
 
 (define make-rat (lambda (n d) (lambda (msg) (cond ((equal? msg "numer") n) ((equal? msg "denom") d)))))

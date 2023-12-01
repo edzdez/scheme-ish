@@ -11,7 +11,7 @@ use std::{fs, io};
 use thiserror::Error;
 
 #[derive(Clone, PartialEq)]
-struct Environment<'a> {
+pub struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
     pub parent: Option<&'a Environment<'a>>,
 }
@@ -20,17 +20,14 @@ impl Default for Environment<'_> {
     fn default() -> Self {
         let mut vtable = HashMap::new();
         vtable.insert(String::from("nil"), Value::Nil);
-        vtable.insert(String::from("+"), Value::BuiltinFunc(&Evaluator::plus));
-        vtable.insert(String::from("-"), Value::BuiltinFunc(&Evaluator::subtract));
-        vtable.insert(String::from("<"), Value::BuiltinFunc(&Evaluator::less));
-        vtable.insert(String::from(">"), Value::BuiltinFunc(&Evaluator::greater));
-        vtable.insert(String::from("cons"), Value::BuiltinFunc(&Evaluator::cons));
-        vtable.insert(String::from("car"), Value::BuiltinFunc(&Evaluator::car));
-        vtable.insert(String::from("cdr"), Value::BuiltinFunc(&Evaluator::cdr));
-        vtable.insert(
-            String::from("equal?"),
-            Value::BuiltinFunc(&Evaluator::equal),
-        );
+        vtable.insert(String::from("+"), Value::Builtin(&Evaluator::plus));
+        vtable.insert(String::from("-"), Value::Builtin(&Evaluator::subtract));
+        vtable.insert(String::from("<"), Value::Builtin(&Evaluator::less));
+        vtable.insert(String::from(">"), Value::Builtin(&Evaluator::greater));
+        vtable.insert(String::from("cons"), Value::Builtin(&Evaluator::cons));
+        vtable.insert(String::from("car"), Value::Builtin(&Evaluator::car));
+        vtable.insert(String::from("cdr"), Value::Builtin(&Evaluator::cdr));
+        vtable.insert(String::from("equal?"), Value::Builtin(&Evaluator::equal));
 
         Self {
             vtable,
@@ -51,11 +48,31 @@ impl<'a> Environment<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Func {
-    params: Vec<Token>, // these should only be identifiers
+    params: Vec<Token>,
     body: Vec<Expr>,
-    // closed_env_vtable: HashMap<String, Value>, // the environment that is closed over
+    env: HashMap<String, Value>, // the environment that is closed over
+}
+
+impl Func {
+    pub fn new(params: Vec<Token>, body: Vec<Expr>, env: &Environment) -> Self {
+        Self {
+            params,
+            body,
+            env: Self::copy_environment(env).vtable,
+        }
+    }
+
+    fn copy_environment<'a>(env: &'a Environment<'a>) -> Environment<'a> {
+        if let Some(parent) = env.parent {
+            let mut parent = Self::copy_environment(parent);
+            parent.vtable.extend(env.vtable.clone());
+            parent
+        } else {
+            env.clone()
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -66,7 +83,7 @@ pub enum Value {
     Bool(bool),
     List(LinkedList<Value>),
     Function(Func),
-    BuiltinFunc(&'static dyn Fn(Vec<Value>) -> Result<Value, EvalError>),
+    Builtin(&'static dyn Fn(Vec<Value>) -> Result<Value, EvalError>),
     Nil,
     Unit,
 }
@@ -80,7 +97,7 @@ impl PartialEq for Value {
             (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
             (Self::List(l0), Self::List(r0)) => l0 == r0,
             (Self::Function(l0), Self::Function(r0)) => l0 == r0,
-            (Self::BuiltinFunc(_), Self::BuiltinFunc(_)) => false,
+            (Self::Builtin(_), Self::Builtin(_)) => false,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
     }
@@ -114,9 +131,9 @@ impl Display for Value {
                 write!(f, ")")
             }
             Value::Function(func) => write!(f, "#function_{:p}", func),
+            Value::Builtin(func) => write!(f, "#function_{:p}", func),
             Value::Nil => write!(f, "nil"),
             Value::Unit => write!(f, "Unit"),
-            Value::BuiltinFunc(func) => write!(f, "#function_{:p}", func),
         }
     }
 }
@@ -146,7 +163,7 @@ impl Evaluator {
                     "if" => Self::if_(args, env),
                     "begin" => Self::begin_(args, env),
                     "load" => Self::load_(args, env),
-                    "lambda" => Self::lambda_(args),
+                    "lambda" => Self::lambda_(args, env),
 
                     _ => {
                         let val = env.find(&f);
@@ -157,7 +174,7 @@ impl Evaluator {
                                 let args = Self::eval_args(args, env)?;
                                 Self::eval_func(func, args, env)
                             }
-                            Some(&Value::BuiltinFunc(func)) => {
+                            Some(&Value::Builtin(func)) => {
                                 let args = Self::flatten_args(args)?;
                                 let args = Self::eval_args(args, env)?;
                                 func(args)
@@ -182,9 +199,11 @@ impl Evaluator {
         }
     }
 
-    fn eval_func(func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
+    fn eval_func(mut func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut new_env = Self::process_args(&func.params, args)?;
+        std::mem::swap(&mut new_env.vtable, &mut func.env);
         new_env.parent = Some(env);
+        new_env.vtable.extend(func.env);
 
         let mut out = Value::Unit;
         for expr in func.body {
@@ -303,7 +322,7 @@ impl Evaluator {
         Ok(Value::Unit)
     }
 
-    fn lambda_(args: Option<Box<Expr>>) -> Result<Value, EvalError> {
+    fn lambda_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let mut args = Self::flatten_args(args)?;
         if args.len() < 2 {
             return Err(EvalError::InvalidArguments);
@@ -325,18 +344,11 @@ impl Evaluator {
             return Err(EvalError::InvalidArguments);
         }
 
-        // TODO: Closures
-        // let mut closed_env_vtable = HashMap::new();
-        // for expr in body {
-        //     let flattened = Self::flatten_args(Some(Box::new(expr)))?;
-        //
-        // }
-
         if dot && params[params.len() - 2] != Token::Ident(String::from(".")) {
             return Err(EvalError::InvalidArguments);
         }
 
-        Ok(Value::Function(Func { params, body }))
+        Ok(Value::Function(Func::new(params, body, env)))
     }
 
     fn if_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
@@ -416,10 +428,8 @@ impl Evaluator {
         Ok(Value::Unit)
     }
 
-    fn cons(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn cons(mut args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2)?;
-
-        let mut args = args;
         let cdr = args.pop().unwrap();
         let car = args.pop().unwrap();
 
@@ -444,9 +454,8 @@ impl Evaluator {
         }
     }
 
-    fn cdr(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn cdr(mut args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 1)?;
-        let mut args = args;
 
         if let Value::List(mut l) = args.pop().unwrap() {
             if l.is_empty() {
@@ -501,17 +510,13 @@ impl Evaluator {
         Ok(Value::Number(sum))
     }
 
-    fn equal(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn equal(mut args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2)?;
-        let mut args = args;
-
         Ok(Value::Bool(args.pop() == args.pop()))
     }
 
-    fn less(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn less(mut args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2)?;
-        let mut args = args;
-
         if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
             Ok(Value::Bool(b < a))
         } else {
@@ -519,10 +524,8 @@ impl Evaluator {
         }
     }
 
-    fn greater(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn greater(mut args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2)?;
-        let mut args = args;
-
         if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
             Ok(Value::Bool(b > a))
         } else {

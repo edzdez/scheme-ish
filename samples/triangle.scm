@@ -1,6 +1,6 @@
-(define triangle-me-daddy
+(define triangle
   (lambda (n)
     (if (equal? n 0)
         0
-        (+ n (triangle-me-daddy (- n 1))))))
+        (+ n (triangle (- n 1))))))
 
