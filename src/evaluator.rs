@@ -5,12 +5,12 @@ use crate::lexer::{LexError, Lexer};
 use crate::parser::{ParseError, Parser};
 use crate::tokens::Token;
 use std::collections::{HashMap, LinkedList};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::iter::zip;
 use std::{fs, io};
 use thiserror::Error;
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
     pub parent: Option<&'a Environment<'a>>,
@@ -138,6 +138,12 @@ impl Display for Value {
     }
 }
 
+impl Debug for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 #[derive(Default)]
 pub struct Evaluator {
     global: Environment<'static>,
@@ -185,12 +191,19 @@ impl Evaluator {
                 },
                 _ => {
                     let func = Self::eval(*func, env)?;
-                    if let Value::Function(func) = func {
-                        let args = Self::flatten_args(args)?;
-                        let args = Self::eval_args(args, env)?;
-                        Self::eval_func(func, args, env)
-                    } else {
-                        Err(EvalError::NotAFunction)
+                    match &func {
+                        Value::Function(func) => {
+                            let func = func.clone();
+                            let args = Self::flatten_args(args)?;
+                            let args = Self::eval_args(args, env)?;
+                            Self::eval_func(func, args, env)
+                        }
+                        &Value::Builtin(func) => {
+                            let args = Self::flatten_args(args)?;
+                            let args = Self::eval_args(args, env)?;
+                            func(args)
+                        }
+                        _ => Err(EvalError::NotAFunction),
                     }
                 }
             },
