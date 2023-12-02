@@ -10,30 +10,10 @@ use std::iter::zip;
 use std::{fs, io};
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Environment<'a> {
     pub vtable: HashMap<String, Value>,
     pub parent: Option<&'a Environment<'a>>,
-}
-
-impl Default for Environment<'_> {
-    fn default() -> Self {
-        let mut vtable = HashMap::new();
-        vtable.insert(String::from("nil"), Value::Nil);
-        vtable.insert(String::from("+"), Value::Builtin(&Evaluator::plus));
-        vtable.insert(String::from("-"), Value::Builtin(&Evaluator::subtract));
-        vtable.insert(String::from("<"), Value::Builtin(&Evaluator::less));
-        vtable.insert(String::from(">"), Value::Builtin(&Evaluator::greater));
-        vtable.insert(String::from("cons"), Value::Builtin(&Evaluator::cons));
-        vtable.insert(String::from("car"), Value::Builtin(&Evaluator::car));
-        vtable.insert(String::from("cdr"), Value::Builtin(&Evaluator::cdr));
-        vtable.insert(String::from("equal?"), Value::Builtin(&Evaluator::equal));
-
-        Self {
-            vtable,
-            parent: None,
-        }
-    }
 }
 
 impl<'a> Environment<'a> {
@@ -48,11 +28,20 @@ impl<'a> Environment<'a> {
     }
 }
 
+impl<'a> From<HashMap<String, Value>> for Environment<'a> {
+    fn from(value: HashMap<String, Value>) -> Self {
+        Self {
+            vtable: value,
+            parent: None,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub struct Func {
     params: Vec<Token>,
     body: Vec<Expr>,
-    env: HashMap<String, Value>, // the environment that is closed over
+    closed_over: HashMap<String, Value>, // the environment that is closed over
 }
 
 impl Func {
@@ -60,11 +49,12 @@ impl Func {
         Self {
             params,
             body,
-            env: Self::copy_environment(env).vtable,
+            closed_over: Self::copy_environment(env).vtable,
         }
     }
 
     fn copy_environment<'a>(env: &'a Environment<'a>) -> Environment<'a> {
+        println!("copy environment");
         if let Some(parent) = env.parent {
             let mut parent = Self::copy_environment(parent);
             parent.vtable.extend(env.vtable.clone());
@@ -144,7 +134,6 @@ impl Debug for Value {
     }
 }
 
-#[derive(Default)]
 pub struct Evaluator {
     global: Environment<'static>,
 }
@@ -212,15 +201,12 @@ impl Evaluator {
         }
     }
 
-    fn eval_func(
-        mut func: Func,
-        args: Vec<Value>,
-        env: &mut Environment,
-    ) -> Result<Value, EvalError> {
-        let mut new_env = Self::process_args(&func.params, args)?;
-        std::mem::swap(&mut new_env.vtable, &mut func.env);
+    fn eval_func(func: Func, args: Vec<Value>, env: &mut Environment) -> Result<Value, EvalError> {
+        let mut new_env = Environment::from(func.closed_over);
         new_env.parent = Some(env);
-        new_env.vtable.extend(func.env);
+        new_env
+            .vtable
+            .extend(Self::process_args(&func.params, args)?);
 
         let mut out = Value::Unit;
         for expr in func.body {
@@ -266,8 +252,8 @@ impl Evaluator {
     fn process_args<'a>(
         params: &Vec<Token>,
         args: Vec<Value>,
-    ) -> Result<Environment<'a>, EvalError> {
-        let mut out = Environment::default();
+    ) -> Result<HashMap<String, Value>, EvalError> {
+        let mut out = HashMap::new();
 
         if params.len() >= 2 && params[params.len() - 2] == Token::Ident(String::from(".")) {
             Self::validate_arity(&args, params.len() - 2, &usize::ge)?;
@@ -278,7 +264,7 @@ impl Evaluator {
                 args.drain(0..params.len() - 2),
             );
             while let Some((Token::Ident(param), arg)) = iter.next() {
-                out.add(param.to_string(), arg);
+                out.insert(param.to_string(), arg);
             }
 
             drop(iter);
@@ -291,13 +277,13 @@ impl Evaluator {
                     Value::List(var)
                 };
 
-                out.add(param.to_owned(), var);
+                out.insert(param.to_owned(), var);
             }
         } else {
             Self::validate_arity(&args, params.len(), &usize::eq)?;
             let mut iter = zip(params, args);
             while let Some((Token::Ident(param), arg)) = iter.next() {
-                out.add(param.to_string(), arg);
+                out.insert(param.to_string(), arg);
             }
         }
 
@@ -542,6 +528,23 @@ impl Evaluator {
         } else {
             Err(EvalError::InvalidArguments)
         }
+    }
+}
+
+impl Default for Evaluator {
+    fn default() -> Self {
+        let mut global = Environment::default();
+        global.add(String::from("nil"), Value::Nil);
+        global.add(String::from("+"), Value::Builtin(&Evaluator::plus));
+        global.add(String::from("-"), Value::Builtin(&Evaluator::subtract));
+        global.add(String::from("<"), Value::Builtin(&Evaluator::less));
+        global.add(String::from(">"), Value::Builtin(&Evaluator::greater));
+        global.add(String::from("cons"), Value::Builtin(&Evaluator::cons));
+        global.add(String::from("car"), Value::Builtin(&Evaluator::car));
+        global.add(String::from("cdr"), Value::Builtin(&Evaluator::cdr));
+        global.add(String::from("equal?"), Value::Builtin(&Evaluator::equal));
+
+        Self { global }
     }
 }
 
