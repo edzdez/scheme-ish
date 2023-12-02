@@ -474,7 +474,21 @@ impl Evaluator {
         }
     }
 
-    fn subtract(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn add(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2, &usize::ge)?;
+
+        let mut sum = 0;
+        for val in args {
+            if let Value::Number(x) = val {
+                sum += x;
+            } else {
+                return Err(EvalError::ArithmeticError);
+            }
+        }
+        Ok(Value::Number(sum))
+    }
+
+    fn sub(args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2, &usize::ge)?;
 
         let mut sum = 0;
@@ -493,18 +507,39 @@ impl Evaluator {
         Ok(Value::Number(sum))
     }
 
-    fn plus(args: Vec<Value>) -> Result<Value, EvalError> {
+    fn mul(args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2, &usize::ge)?;
 
-        let mut sum = 0;
+        let mut prod = 1;
+
         for val in args {
             if let Value::Number(x) = val {
-                sum += x;
+                prod *= x;
             } else {
                 return Err(EvalError::ArithmeticError);
             }
         }
-        Ok(Value::Number(sum))
+
+        Ok(Value::Number(prod))
+    }
+
+    fn div(args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2, &usize::ge)?;
+
+        let mut quotient = 1;
+        if let Value::Number(x) = &args[0] {
+            quotient *= x * x;
+        }
+
+        for val in args {
+            if let Value::Number(x) = val {
+                quotient /= x;
+            } else {
+                return Err(EvalError::ArithmeticError);
+            }
+        }
+
+        Ok(Value::Number(quotient))
     }
 
     fn equal(mut args: Vec<Value>) -> Result<Value, EvalError> {
@@ -535,8 +570,10 @@ impl Default for Evaluator {
     fn default() -> Self {
         let mut global = Environment::default();
         global.add(String::from("nil"), Value::Nil);
-        global.add(String::from("+"), Value::Builtin(&Evaluator::plus));
-        global.add(String::from("-"), Value::Builtin(&Evaluator::subtract));
+        global.add(String::from("+"), Value::Builtin(&Evaluator::add));
+        global.add(String::from("-"), Value::Builtin(&Evaluator::sub));
+        global.add(String::from("*"), Value::Builtin(&Evaluator::mul));
+        global.add(String::from("/"), Value::Builtin(&Evaluator::div));
         global.add(String::from("<"), Value::Builtin(&Evaluator::less));
         global.add(String::from(">"), Value::Builtin(&Evaluator::greater));
         global.add(String::from("cons"), Value::Builtin(&Evaluator::cons));
