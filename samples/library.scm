@@ -16,7 +16,6 @@
         0
         (+ 1 (len (cdr l))))))
 
-
 (define map
   (lambda (f l)
     (if (nil? l)

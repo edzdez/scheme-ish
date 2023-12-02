@@ -46,22 +46,35 @@ pub struct Func {
 
 impl Func {
     pub fn new(params: Vec<Token>, body: Vec<Expr>, env: &Environment) -> Self {
+        let closed_over = Self::move_in(&body, env);
         Self {
             params,
             body,
-            closed_over: Self::copy_environment(env).vtable,
+            closed_over,
         }
     }
 
-    fn copy_environment<'a>(env: &'a Environment<'a>) -> Environment<'a> {
-        println!("copy environment");
-        if let Some(parent) = env.parent {
-            let mut parent = Self::copy_environment(parent);
-            parent.vtable.extend(env.vtable.clone());
-            parent
-        } else {
-            env.clone()
+    fn find_idents(body: &Expr) -> Vec<String> {
+        match body {
+            Expr::Atom(Token::Ident(x)) => vec![x.clone()],
+            Expr::Pair(Some(car), Some(cdr)) => Self::find_idents(car)
+                .into_iter()
+                .chain(Self::find_idents(cdr))
+                .collect(),
+            Expr::Pair(Some(car), None) => Self::find_idents(car),
+            _ => vec![],
         }
+    }
+
+    fn move_in<'a>(body: &Vec<Expr>, env: &'a Environment<'a>) -> HashMap<String, Value> {
+        body.into_iter()
+            .flat_map(|expr| {
+                Self::find_idents(expr)
+                    .into_iter()
+                    .map(|x| env.find(&x).map(|val| (x, val.clone())))
+            })
+            .filter_map(|x| x)
+            .collect()
     }
 }
 
@@ -74,6 +87,7 @@ pub enum Value {
     List(LinkedList<Value>),
     Function(Func),
     Builtin(&'static dyn Fn(Vec<Value>) -> Result<Value, EvalError>),
+    Special(&'static dyn Fn(Option<Box<Expr>>, &mut Environment) -> Result<Value, EvalError>),
     Nil,
     Unit,
 }
@@ -122,6 +136,7 @@ impl Display for Value {
             }
             Value::Function(func) => write!(f, "#function_{:p}", func),
             Value::Builtin(func) => write!(f, "#function_{:p}", func),
+            Value::Special(func) => write!(f, "#function_{:p}", func),
             Value::Nil => write!(f, "nil"),
             Value::Unit => write!(f, "Unit"),
         }
@@ -151,33 +166,24 @@ impl Evaluator {
         match expr {
             Expr::Atom(t) => Self::eval_atom(t, env),
             Expr::Pair(Some(func), args) => match *func {
-                Expr::Atom(Token::Ident(f)) => match f.as_str() {
-                    // special forms
-                    "define" => Self::define_(args, env),
-                    "cond" => Self::cond_(args, env),
-                    "if" => Self::if_(args, env),
-                    "begin" => Self::begin_(args, env),
-                    "load" => Self::load_(args, env),
-                    "lambda" => Self::lambda_(args, env),
-
-                    _ => {
-                        let val = env.find(&f);
-                        match val {
-                            Some(Value::Function(func)) => {
-                                let func = func.clone();
-                                let args = Self::flatten_args(args)?;
-                                let args = Self::eval_args(args, env)?;
-                                Self::eval_func(func, args, env)
-                            }
-                            Some(&Value::Builtin(func)) => {
-                                let args = Self::flatten_args(args)?;
-                                let args = Self::eval_args(args, env)?;
-                                func(args)
-                            }
-                            _ => Err(EvalError::NotAFunction),
+                Expr::Atom(Token::Ident(f)) => {
+                    let val = env.find(&f);
+                    match val {
+                        Some(Value::Function(func)) => {
+                            let func = func.clone();
+                            let args = Self::flatten_args(args)?;
+                            let args = Self::eval_args(args, env)?;
+                            Self::eval_func(func, args, env)
                         }
+                        Some(&Value::Builtin(func)) => {
+                            let args = Self::flatten_args(args)?;
+                            let args = Self::eval_args(args, env)?;
+                            func(args)
+                        }
+                        Some(&Value::Special(func)) => func(args, env),
+                        _ => Err(EvalError::NotAFunction),
                     }
-                },
+                }
                 _ => {
                     let func = Self::eval(*func, env)?;
                     match &func {
@@ -580,6 +586,12 @@ impl Default for Evaluator {
         global.add(String::from("car"), Value::Builtin(&Evaluator::car));
         global.add(String::from("cdr"), Value::Builtin(&Evaluator::cdr));
         global.add(String::from("equal?"), Value::Builtin(&Evaluator::equal));
+        global.add(String::from("define"), Value::Special(&Evaluator::define_));
+        global.add(String::from("cond"), Value::Special(&Evaluator::cond_));
+        global.add(String::from("if"), Value::Special(&Evaluator::if_));
+        global.add(String::from("begin"), Value::Special(&Evaluator::begin_));
+        global.add(String::from("load"), Value::Special(&Evaluator::load_));
+        global.add(String::from("lambda"), Value::Special(&Evaluator::lambda_));
 
         Self { global }
     }
