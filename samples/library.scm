@@ -38,3 +38,24 @@
   (lambda (. x)
     x))
 
+(define append
+  (lambda (x y)
+    (if (nil? x)
+      y
+      (cons (car x) (append (cdr x) y))))) 
+
+(define take
+  (lambda (l n)
+    (if (< n 1)
+      nil
+      (cons (car l) (take (cdr l) (- n 1))))))
+
+(define drop
+  (lambda (l n)
+    (if (< n 1)
+      l
+      (drop (cdr l) (- n 1)))))
+
+(define slice
+  (lambda (l start end)
+      (take (drop l start) (- end start))))

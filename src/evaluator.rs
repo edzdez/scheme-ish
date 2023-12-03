@@ -4,10 +4,12 @@ use crate::expr::*;
 use crate::lexer::{LexError, Lexer};
 use crate::parser::{ParseError, Parser};
 use crate::tokens::Token;
+use rand::Rng;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::{Debug, Display, Formatter};
+use std::io::{prelude::*, BufReader};
 use std::iter::zip;
-use std::{fs, io};
+use std::{fs::File, io};
 use thiserror::Error;
 
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -102,6 +104,7 @@ impl PartialEq for Value {
             (Self::List(l0), Self::List(r0)) => l0 == r0,
             (Self::Function(l0), Self::Function(r0)) => l0 == r0,
             (Self::Builtin(_), Self::Builtin(_)) => false,
+            (Self::Special(_), Self::Special(_)) => false,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
     }
@@ -128,10 +131,8 @@ impl Display for Value {
                     } else {
                         write!(f, "{} ", v)?;
                     }
-
                     idx += 1;
                 }
-
                 write!(f, ")")
             }
             Value::Function(func) => write!(f, "#function_{:p}", func),
@@ -379,11 +380,15 @@ impl Evaluator {
         Self::validate_arity(&args, 1, &usize::eq)?;
 
         if let Value::String(filename) = args.pop().unwrap() {
-            let contents = fs::read_to_string(filename)?;
             let mut tokenizer = Lexer::new();
             let mut parser = Parser::new();
 
-            tokenizer.tokenize(&contents)?;
+            let file = File::open(filename).expect("no such file");
+            let contents = BufReader::new(file).lines();
+
+            for s in contents.into_iter() {
+                tokenizer.tokenize(&s?)?;
+            }
             parser.parse(&mut tokenizer.tokens.into_iter())?;
 
             for expr in parser.ast {
@@ -553,6 +558,21 @@ impl Evaluator {
         Ok(Value::Bool(args.pop() == args.pop()))
     }
 
+    fn random(mut args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 2, &usize::eq)?;
+        if let (Some(Value::Number(upper)), Some(Value::Number(lower))) = (args.pop(), args.pop()) {
+            Ok(Value::Number(rand::thread_rng().gen_range(lower..upper)))
+        } else {
+            Err(EvalError::InvalidArguments)
+        }
+    }
+
+    fn display(mut args: Vec<Value>) -> Result<Value, EvalError> {
+        Self::validate_arity(&args, 1, &usize::eq)?;
+        println!("{}", args.pop().unwrap());
+        Ok(Value::Unit)
+    }
+
     fn less(mut args: Vec<Value>) -> Result<Value, EvalError> {
         Self::validate_arity(&args, 2, &usize::eq)?;
         if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.pop(), args.pop()) {
@@ -575,7 +595,16 @@ impl Evaluator {
 impl Default for Evaluator {
     fn default() -> Self {
         let mut global = Environment::default();
-        global.add(String::from("nil"), Value::Nil);
+
+        // special forms
+        global.add(String::from("define"), Value::Special(&Evaluator::define_));
+        global.add(String::from("cond"), Value::Special(&Evaluator::cond_));
+        global.add(String::from("if"), Value::Special(&Evaluator::if_));
+        global.add(String::from("begin"), Value::Special(&Evaluator::begin_));
+        global.add(String::from("load"), Value::Special(&Evaluator::load_));
+        global.add(String::from("lambda"), Value::Special(&Evaluator::lambda_));
+
+        // builtin functions
         global.add(String::from("+"), Value::Builtin(&Evaluator::add));
         global.add(String::from("-"), Value::Builtin(&Evaluator::sub));
         global.add(String::from("*"), Value::Builtin(&Evaluator::mul));
@@ -586,12 +615,13 @@ impl Default for Evaluator {
         global.add(String::from("car"), Value::Builtin(&Evaluator::car));
         global.add(String::from("cdr"), Value::Builtin(&Evaluator::cdr));
         global.add(String::from("equal?"), Value::Builtin(&Evaluator::equal));
-        global.add(String::from("define"), Value::Special(&Evaluator::define_));
-        global.add(String::from("cond"), Value::Special(&Evaluator::cond_));
-        global.add(String::from("if"), Value::Special(&Evaluator::if_));
-        global.add(String::from("begin"), Value::Special(&Evaluator::begin_));
-        global.add(String::from("load"), Value::Special(&Evaluator::load_));
-        global.add(String::from("lambda"), Value::Special(&Evaluator::lambda_));
+
+        // values
+        global.add(String::from("nil"), Value::Nil);
+
+        // optional features
+        global.add(String::from("display"), Value::Builtin(&Evaluator::display));
+        global.add(String::from("random"), Value::Builtin(&Evaluator::random));
 
         Self { global }
     }

@@ -21,7 +21,7 @@ impl Lexer {
         self.line = program.trim().chars().collect();
         self.curr_col = 0;
 
-        while !self.line.is_empty() {
+        while !self.line.is_empty() && self.line.front() != Some(&';') {
             match self.lex() {
                 Some((t, n)) => {
                     self.tokens.push(t);
@@ -172,6 +172,9 @@ impl Lexer {
 pub enum LexError {
     #[error("line {0}:{1} data matches no tokens")]
     InvalidToken(usize, usize),
+
+    #[error("{0}")]
+    IO(#[from] std::io::Error),
 }
 
 #[cfg(test)]
