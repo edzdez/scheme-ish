@@ -1,20 +1,24 @@
 # Running Instructions
 
 ## About
+
 We provide a [REPL](https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop) functionality.
 There is no need for newlines between code blocks.
 Simply, enter the code that you want to interpret, or load any modules with the 
 ```scheme
-(load "filename")```
+(load "filename")
+```
 command.
 
 ## Start 
+
 ```shell
 $ git clone https://github.com/edzdez/scheme-ish
 $ cargo run --release
 ```
 
 ## Example Usage
+
 ```scheme
 Welcome to scheme-ish!
 Type :h for help
