@@ -19,8 +19,11 @@ fn evaluate(buffer: &str, evaluator: &mut Evaluator) -> Result<(), ReplError> {
     parser.parse(&mut tokenizer.tokens.into_iter())?;
 
     for expr in parser.ast {
-        let out = evaluator.evaluate(expr)?;
-        println!("{}", out);
+        let out = evaluator.evaluate(expr);
+        if let Err(EvalError::Exit) = out {
+            return Err(ReplError::Exit);
+        }
+        println!("{}", out?);
     }
 
     Ok(())
@@ -54,7 +57,7 @@ fn main() {
     loop {
         match repl(&mut evaluator) {
             Ok(true) => {}
-            Ok(false) => {
+            Ok(false) | Err(ReplError::Exit) => {
                 println!("Goodbye!");
                 break;
             }
@@ -72,6 +75,9 @@ pub enum ReplError {
 
     #[error("{0}")]
     Parse(#[from] ParseError),
+
+    #[error("")]
+    Exit,
 
     #[error("{0}")]
     Eval(#[from] EvalError),

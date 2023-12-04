@@ -400,6 +400,10 @@ impl Evaluator {
         }
     }
 
+    fn exit_(_: Option<Box<Expr>>, _: &mut Environment) -> Result<Value, EvalError> {
+        Err(EvalError::Exit)
+    }
+
     fn begin_(args: Option<Box<Expr>>, env: &mut Environment) -> Result<Value, EvalError> {
         let args = Self::flatten_args(args)?;
         let mut out = Value::Unit;
@@ -601,8 +605,11 @@ impl Default for Evaluator {
         global.add(String::from("cond"), Value::Special(&Evaluator::cond_));
         global.add(String::from("if"), Value::Special(&Evaluator::if_));
         global.add(String::from("begin"), Value::Special(&Evaluator::begin_));
-        global.add(String::from("load"), Value::Special(&Evaluator::load_));
         global.add(String::from("lambda"), Value::Special(&Evaluator::lambda_));
+        
+        // directives
+        global.add(String::from("load"), Value::Special(&Evaluator::load_));
+        global.add(String::from("exit"), Value::Special(&Evaluator::exit_));
 
         // builtin functions
         global.add(String::from("+"), Value::Builtin(&Evaluator::add));
@@ -649,6 +656,9 @@ pub enum EvalError {
 
     #[error("Expected argument list, found none")]
     ExpectedArgumentList,
+
+    #[error("Exit")]
+    Exit,
 
     #[error("{0}")]
     Lex(#[from] LexError),
