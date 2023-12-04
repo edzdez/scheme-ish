@@ -16,7 +16,8 @@
         (display "hello from false"))))
 
 ;; lambdas are a sort of closure
-;; they refer to the state of the program at the time of creation
+;; they refer to the state of the program at the
+;; time of creation
 
 (define x 4)
 
@@ -35,7 +36,8 @@
 ;; however, in the closure, x is still 4
 (define b (check))
 
-;; by renewing the closure, the state of the program has x's value at 5
+;; by renewing the closure, the state of the
+;; program has x's value at 5
 (define check
   (lambda ()
     (equal? x 4)))

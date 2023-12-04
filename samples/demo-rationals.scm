@@ -1,6 +1,10 @@
 (load "samples/library.scm")
 
-(define make-rat (lambda (n d) (lambda (msg) (cond ((equal? msg "numer") n) ((equal? msg "denom") d)))))
+(define make-rat
+  (lambda (n d)
+    (lambda (msg)
+      (cond ((equal? msg "numer") n)
+            ((equal? msg "denom") d)))))
 
 (define add-rat
   (lambda (x y)
