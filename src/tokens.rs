@@ -7,7 +7,6 @@ pub enum Token {
     String(String),
     LParen,
     RParen,
-    // TODO: comments?
 }
 
 impl Token {

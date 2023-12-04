@@ -1,8 +1,8 @@
 use crate::evaluator::environment::Environment;
-use crate::evaluator::evaluator::EvalError;
 use crate::evaluator::func::Func;
 use crate::evaluator::value::Value;
-use crate::evaluator::evaluator::Evaluator;
+use crate::evaluator::EvalError;
+use crate::evaluator::Evaluator;
 use crate::expr::*;
 use crate::lexer::Lexer;
 use crate::parser::Parser;

@@ -1,6 +1,6 @@
 use crate::evaluator::environment::Environment;
-use crate::evaluator::evaluator::EvalError;
 use crate::evaluator::func::Func;
+use crate::evaluator::EvalError;
 use crate::expr::Expr;
 use std::collections::LinkedList;
 use std::fmt::{Debug, Display, Formatter};
