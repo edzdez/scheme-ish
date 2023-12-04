@@ -1,4 +1,4 @@
-use scheme_ish::evaluator::{EvalError, Evaluator};
+use scheme_ish::evaluator::{evaluator::EvalError, evaluator::Evaluator};
 use scheme_ish::lexer::{LexError, Lexer};
 use scheme_ish::parser::{ParseError, Parser};
 

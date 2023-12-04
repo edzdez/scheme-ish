@@ -1,154 +1,19 @@
 #![allow(dead_code)]
 
+use crate::evaluator::environment::Environment;
+use crate::evaluator::func::Func;
+use crate::evaluator::value::Value;
 use crate::expr::*;
 use crate::lexer::{LexError, Lexer};
 use crate::parser::{ParseError, Parser};
 use crate::tokens::Token;
 use rand::Rng;
 use std::collections::{HashMap, LinkedList};
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::io::{prelude::*, BufReader};
 use std::iter::zip;
 use std::{fs::File, io};
 use thiserror::Error;
-
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct Environment<'a> {
-    pub vtable: HashMap<String, Value>,
-    pub parent: Option<&'a Environment<'a>>,
-}
-
-impl<'a> Environment<'a> {
-    pub fn find(&self, s: &String) -> Option<&Value> {
-        self.vtable
-            .get(s)
-            .or_else(|| self.parent.map(|env| env.find(s))?)
-    }
-
-    pub fn add(&mut self, name: String, value: Value) {
-        self.vtable.insert(name, value);
-    }
-}
-
-impl<'a> From<HashMap<String, Value>> for Environment<'a> {
-    fn from(value: HashMap<String, Value>) -> Self {
-        Self {
-            vtable: value,
-            parent: None,
-        }
-    }
-}
-
-#[derive(Clone, PartialEq)]
-pub struct Func {
-    params: Vec<Token>,
-    body: Vec<Expr>,
-    closed_over: HashMap<String, Value>, // the environment that is closed over
-}
-
-impl Func {
-    pub fn new(params: Vec<Token>, body: Vec<Expr>, env: &Environment) -> Self {
-        let closed_over = Self::move_in(&body, env);
-        Self {
-            params,
-            body,
-            closed_over,
-        }
-    }
-
-    fn find_idents(body: &Expr) -> Vec<String> {
-        match body {
-            Expr::Atom(Token::Ident(x)) => vec![x.clone()],
-            Expr::Pair(Some(car), Some(cdr)) => Self::find_idents(car)
-                .into_iter()
-                .chain(Self::find_idents(cdr))
-                .collect(),
-            Expr::Pair(Some(car), None) => Self::find_idents(car),
-            _ => vec![],
-        }
-    }
-
-    fn move_in<'a>(body: &Vec<Expr>, env: &'a Environment<'a>) -> HashMap<String, Value> {
-        body.into_iter()
-            .flat_map(|expr| {
-                Self::find_idents(expr)
-                    .into_iter()
-                    .map(|x| env.find(&x).map(|val| (x, val.clone())))
-            })
-            .filter_map(|x| x)
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-pub enum Value {
-    String(String),
-    Char(char),
-    Number(i64),
-    Bool(bool),
-    List(LinkedList<Value>),
-    Function(Func),
-    Builtin(&'static dyn Fn(Vec<Value>) -> Result<Value, EvalError>),
-    Special(&'static dyn Fn(Option<Box<Expr>>, &mut Environment) -> Result<Value, EvalError>),
-    Nil,
-    Unit,
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::String(l0), Self::String(r0)) => l0 == r0,
-            (Self::Char(l0), Self::Char(r0)) => l0 == r0,
-            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
-            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
-            (Self::List(l0), Self::List(r0)) => l0 == r0,
-            (Self::Function(l0), Self::Function(r0)) => l0 == r0,
-            (Self::Builtin(_), Self::Builtin(_)) => false,
-            (Self::Special(_), Self::Special(_)) => false,
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
-        }
-    }
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::String(s) => write!(f, "\"{}\"", s),
-            Value::Char(c) => write!(f, "'{}'", c),
-            Value::Number(n) => write!(f, "{}", n),
-            Value::Bool(b) => write!(f, "{}", if *b { "#t" } else { "#f" }),
-            Value::List(l) => {
-                let back = l.back().expect("the world is ending");
-                let mut idx = 1;
-                let len = l.len();
-
-                write!(f, "( ")?;
-                for v in l {
-                    if idx == len {
-                        if *back != Value::Nil {
-                            write!(f, ". {} ", v)?;
-                        }
-                    } else {
-                        write!(f, "{} ", v)?;
-                    }
-                    idx += 1;
-                }
-                write!(f, ")")
-            }
-            Value::Function(func) => write!(f, "#function_{:p}", func),
-            Value::Builtin(func) => write!(f, "#function_{:p}", func),
-            Value::Special(func) => write!(f, "#function_{:p}", func),
-            Value::Nil => write!(f, "nil"),
-            Value::Unit => write!(f, "Unit"),
-        }
-    }
-}
-
-impl Debug for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
-}
 
 pub struct Evaluator {
     global: Environment<'static>,
@@ -383,7 +248,7 @@ impl Evaluator {
             let mut tokenizer = Lexer::new();
             let mut parser = Parser::new();
 
-            let file = File::open(filename).expect("no such file");
+            let file = File::open(filename)?;
             let contents = BufReader::new(file).lines();
 
             for s in contents.into_iter() {
@@ -606,7 +471,7 @@ impl Default for Evaluator {
         global.add(String::from("if"), Value::Special(&Evaluator::if_));
         global.add(String::from("begin"), Value::Special(&Evaluator::begin_));
         global.add(String::from("lambda"), Value::Special(&Evaluator::lambda_));
-        
+
         // directives
         global.add(String::from("load"), Value::Special(&Evaluator::load_));
         global.add(String::from("exit"), Value::Special(&Evaluator::exit_));
