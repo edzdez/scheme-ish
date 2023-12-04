@@ -1,11 +1,13 @@
 pub mod environment;
 pub mod func;
 pub mod library;
+pub mod utility;
 pub mod value;
 
 use crate::evaluator::environment::Environment;
 use crate::evaluator::func::Func;
 use crate::evaluator::library::*;
+use crate::evaluator::utility::*;
 use crate::evaluator::value::Value;
 use crate::expr::*;
 use crate::lexer::LexError;
